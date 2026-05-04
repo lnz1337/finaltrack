@@ -82,8 +82,8 @@ Documente a decisão antes de implementar.
 | Worker scaffold + libs core | 5-13 | ✅ done (2026-05-04) — 52 testes passando |
 | Click capture | 14-16 | ✅ done (2026-05-04) — 57 testes passando |
 | Webhooks Kiwify + Hotmart | 17-20 | ✅ done (2026-05-04) — 72 testes passando |
-| Frontend (Next.js + login + dashboard) | 21-26 | em andamento |
-| Smoke test E2E | 27 | pendente |
+| Frontend (Next.js + login + dashboard) | 21-26 | ✅ done (2026-05-04) — Next 16 + Tailwind v4 + shadcn |
+| Smoke test E2E | 27 | 📋 checklist pronto em `docs/specs/phase-1-smoke-test.md` (executar manualmente) |
 
 Atualize esta tabela conforme completa cada bloco.
 
@@ -123,6 +123,16 @@ Atualize esta tabela conforme completa cada bloco.
 - **Duplicação ~92% entre `webhook-kiwify.ts` e `webhook-hotmart.ts`**: aceito pra v1 (auth diferentes — HMAC vs Hottok). Refatorar em `processConversion()` helper se aparecer terceira plataforma.
 - **Hottok comparison não é timing-safe** (`!==` direto). Static shared secret tem risco menor de timing attack que HMAC, mas defensivamente vale upgrade pra `timingSafeEqualHex` em v2.
 - **72 testes passando** (webhook-hotmart 3 + webhook-kiwify 5 + hotmart parser 3 + kiwify parser 4 + 57 prior).
+
+### Bloco Frontend (Tasks 21-26) — 2026-05-04
+
+- **Next.js 16.2.4 instalado** (não 15 como o plano previa) — latest stable. App Router, Tailwind v4 (CSS-first config), shadcn (estilo base-nova), Turbopack ativo apesar do `--no-turbopack` (Next 16 default). Supabase SSR `^0.10.2`. User pré-aprovou prosseguir com versões atuais.
+- **`(dashboard)` route group** — auth guard centralizado no layout, redirect pra `/login` se sem session.
+- **Tipos TS gerados** com `supabase gen types typescript --local` — 923 linhas, todas as 13 tabelas + views.
+- **Dependências instaladas no app workspace**: `@supabase/supabase-js`, `@supabase/ssr`, shadcn (button, input, table, card, label).
+- **`app/.env.local.example` commitado**, `app/.env.local` gitignored com anon key local.
+- **Cookies do Supabase SSR** funcionam com `await cookies()` em Next 16 (já era async desde Next 15).
+- Build passa em `pnpm --filter ./app build`. Sem testes automatizados (frontend é coberto pelo smoke).
 
 ---
 
