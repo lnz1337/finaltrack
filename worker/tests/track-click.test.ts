@@ -1,13 +1,17 @@
 import { SELF, env } from 'cloudflare:test';
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterAll } from 'vitest';
 import { createSupabaseClient } from '../src/lib/supabase';
 
 const WS = '00000000-0000-0000-0000-000000000001';
 const sb = createSupabaseClient(env);
+const TEST_CLICK_PREFIX = 'test_track_';
 
-beforeEach(async () => {
-  await sb.delete('clicks', { workspace_id: `eq.${WS}`, click_id: 'like.tc_*' });
-});
+async function cleanup() {
+  await sb.delete('clicks', { workspace_id: `eq.${WS}`, click_id: `like.${TEST_CLICK_PREFIX}%` });
+}
+
+beforeEach(cleanup);
+afterAll(cleanup);
 
 const HUMAN_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 
@@ -25,7 +29,7 @@ describe('POST /track/click', () => {
       },
       body: JSON.stringify({
         workspace_id: WS,
-        click_id: 'tc_1',
+        click_id: 'test_track_1',
         visitor_id: 'vTC',
         landing_url: 'http://lp/?gclid=ABC&utm_campaign=Foo|123&utm_content=Adset|456&utm_term=Ad|789',
         gclid: 'ABC',
@@ -38,7 +42,7 @@ describe('POST /track/click', () => {
     expect(res.status).toBe(204);
 
     const rows = await sb.select<any>('clicks', {
-      click_id: 'eq.tc_1',
+      click_id: 'eq.test_track_1',
       select: 'click_id,gclid,campaign_name_parsed,campaign_id_parsed,adset_name_parsed,adset_id_parsed,ad_name_parsed,ad_id_parsed,country,city,device_type,browser',
     });
     expect(rows.length).toBe(1);
@@ -64,10 +68,10 @@ describe('POST /track/click', () => {
         'content-type': 'application/json',
         'user-agent': 'Googlebot/2.1 (+http://www.google.com/bot.html)',
       },
-      body: JSON.stringify({ workspace_id: WS, click_id: 'tc_bot', visitor_id: 'v', landing_url: 'http://lp' }),
+      body: JSON.stringify({ workspace_id: WS, click_id: 'test_track_bot', visitor_id: 'v', landing_url: 'http://lp' }),
     });
     expect(res.status).toBe(204);
-    const rows = await sb.select<any>('clicks', { click_id: 'eq.tc_bot', select: 'click_id' });
+    const rows = await sb.select<any>('clicks', { click_id: 'eq.test_track_bot', select: 'click_id' });
     expect(rows.length).toBe(0);
   });
 
@@ -75,19 +79,19 @@ describe('POST /track/click', () => {
     const res = await SELF.fetch('http://test/track/click', {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'user-agent': HUMAN_UA },
-      body: JSON.stringify({ click_id: 'tc_x', visitor_id: 'v', landing_url: 'http://lp' }),
+      body: JSON.stringify({ click_id: 'test_track_x', visitor_id: 'v', landing_url: 'http://lp' }),
     });
     expect(res.status).toBe(400);
   });
 
   it('idempotente em click_id duplicado', async () => {
-    const body = JSON.stringify({ workspace_id: WS, click_id: 'tc_dup', visitor_id: 'v', landing_url: 'http://lp', gclid: 'X' });
+    const body = JSON.stringify({ workspace_id: WS, click_id: 'test_track_dup', visitor_id: 'v', landing_url: 'http://lp', gclid: 'X' });
     const headers = { 'content-type': 'application/json', 'user-agent': HUMAN_UA };
     const r1 = await SELF.fetch('http://test/track/click', { method: 'POST', headers, body });
     const r2 = await SELF.fetch('http://test/track/click', { method: 'POST', headers, body });
     expect(r1.status).toBe(204);
     expect(r2.status).toBe(204);
-    const rows = await sb.select<any>('clicks', { click_id: 'eq.tc_dup', select: 'click_id' });
+    const rows = await sb.select<any>('clicks', { click_id: 'eq.test_track_dup', select: 'click_id' });
     expect(rows.length).toBe(1);
   });
 });
@@ -122,7 +126,7 @@ describe('CORS', () => {
       },
       body: JSON.stringify({
         workspace_id: WS,
-        click_id: 'tc_cors',
+        click_id: 'test_track_cors',
         visitor_id: 'v',
         landing_url: 'http://lp',
       }),
@@ -141,7 +145,7 @@ describe('CORS', () => {
       },
       body: JSON.stringify({
         workspace_id: WS,
-        click_id: 'tc_textplain',
+        click_id: 'test_track_textplain',
         visitor_id: 'v',
         landing_url: 'http://lp',
       }),
@@ -158,7 +162,7 @@ describe('CORS', () => {
         'user-agent': HUMAN_UA,
         origin: 'http://localhost:3000',
       },
-      body: JSON.stringify({ click_id: 'tc_400_cors', visitor_id: 'v', landing_url: 'http://lp' }),
+      body: JSON.stringify({ click_id: 'test_track_400_cors', visitor_id: 'v', landing_url: 'http://lp' }),
     });
     expect(res.status).toBe(400);
     expect(res.headers.get('access-control-allow-origin')).toBe('http://localhost:3000');

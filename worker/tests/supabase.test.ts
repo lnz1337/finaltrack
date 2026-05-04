@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterEach } from 'vitest';
+import { describe, it, expect, beforeAll, afterEach, afterAll } from 'vitest';
 import { env } from 'cloudflare:test';
 import { createSupabaseClient } from '../src/lib/supabase';
 
@@ -13,10 +13,12 @@ beforeAll(() => {
 describe('createSupabaseClient', () => {
   const sb = createSupabaseClient(env);
 
-  afterEach(async () => {
-    // limpa qualquer click inserido pelos testes
-    await sb.delete('clicks', { workspace_id: `eq.${TEST_WORKSPACE_ID}`, click_id: 'like.test_*' });
-  });
+  async function cleanup() {
+    await sb.delete('clicks', { workspace_id: `eq.${TEST_WORKSPACE_ID}`, click_id: 'like.test_insert_%' });
+  }
+
+  afterEach(cleanup);
+  afterAll(cleanup);
 
   it('select retorna array', async () => {
     const rows = await sb.select<{ id: string }>('workspaces', { id: `eq.${TEST_WORKSPACE_ID}`, select: 'id' });
