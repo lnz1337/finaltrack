@@ -80,9 +80,9 @@ Documente a decisão antes de implementar.
 |---|---|---|
 | Fundação (workspace + DB + seed) | 1-4 | ✅ done (2026-05-04) |
 | Worker scaffold + libs core | 5-13 | ✅ done (2026-05-04) — 52 testes passando |
-| Click capture | 14-16 | em andamento |
-| Webhooks Kiwify + Hotmart | 17-20 | pendente |
-| Frontend (Next.js + login + dashboard) | 21-26 | pendente |
+| Click capture | 14-16 | ✅ done (2026-05-04) — 57 testes passando |
+| Webhooks Kiwify + Hotmart | 17-20 | ✅ done (2026-05-04) — 72 testes passando |
+| Frontend (Next.js + login + dashboard) | 21-26 | em andamento |
 | Smoke test E2E | 27 | pendente |
 
 Atualize esta tabela conforme completa cada bloco.
@@ -108,6 +108,21 @@ Atualize esta tabela conforme completa cada bloco.
 - **`worker/.dev.vars` autoload pelo vitest pool** (commit `15f080b`): testes de integração (supabase, matching) leem `env.SUPABASE_URL` etc. direto via `cloudflare:test`. Sem wiring extra.
 - **lib/utm.ts ganhou guard** (commit `f4e0e22`): rejeita input com nome vazio após pipe inicial (`'|123'`). Plano original aceitava; reviewer flagou; user aprovou ajuste.
 - **52 testes passando** ao fim do bloco (health 2 + utm 7 + cookies 6 + ua 16 + geo 3 + crypto 7 + supabase 3 + dedup 3 + matching 5).
+
+### Bloco Click capture (Tasks 14-16) — 2026-05-04
+
+- **CORS não implementado** em `/track/click`: plano declarou `ALLOWED_TRACKING_ORIGINS` em env mas não wirou a leitura. Em prod cross-origin via fetch (fallback do sendBeacon) vai falhar. Decidido seguir e revisitar no Task 27 ou em prod.
+- **`req.json<T>()` substituído por `(await req.json()) as T`** em `/track/click` por incompatibilidade de typing com a interface Request do pool. Funcionalmente idêntico.
+- **Dead-code `if (...) {}`** no track-click pra documentar "aceita JSON e text/plain (sendBeacon manda como text/plain)". Plan-faithful, lá só pra registro intencional.
+- **57 testes passando** (track-click 4 + lt-script 1 + 52 prior).
+
+### Bloco Webhooks (Tasks 17-20) — 2026-05-04
+
+- **`.dev.vars` precisa de `ENV="development"`**: vitest-pool-workers não injeta `[vars]` do wrangler.toml.example pro runtime via `SELF.fetch`, só os secrets do `.dev.vars`. Sem `ENV` setado, `resolveWebhookSecret` cai no fluxo de prod (decrypt placeholder ciphertext) e webhook 401-a tudo. Adicionado em `.dev.vars` E `.dev.vars.example` (commits `9bccee3` + `0608a7a`).
+- **`beforeEach` no webhook-kiwify foi estendido**: cleanup original do plano deixava `click_other_id` (test 3) sobrando entre runs, causando 409 unique-constraint na 2ª execução. Adicionado delete extra `like.click_other%`.
+- **Duplicação ~92% entre `webhook-kiwify.ts` e `webhook-hotmart.ts`**: aceito pra v1 (auth diferentes — HMAC vs Hottok). Refatorar em `processConversion()` helper se aparecer terceira plataforma.
+- **Hottok comparison não é timing-safe** (`!==` direto). Static shared secret tem risco menor de timing attack que HMAC, mas defensivamente vale upgrade pra `timingSafeEqualHex` em v2.
+- **72 testes passando** (webhook-hotmart 3 + webhook-kiwify 5 + hotmart parser 3 + kiwify parser 4 + 57 prior).
 
 ---
 
