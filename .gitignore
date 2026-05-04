@@ -27,3 +27,7 @@ Thumbs.db
 .vscode/
 .idea/
 *.swp
+
+# Logs
+*.log
+npm-debug.log*
