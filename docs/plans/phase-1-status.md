@@ -78,8 +78,8 @@ Documente a decisão antes de implementar.
 
 | Bloco | Tasks | Status |
 |---|---|---|
-| Fundação (workspace + DB + seed) | 1-4 | pendente |
-| Worker scaffold + libs core | 5-13 | pendente |
+| Fundação (workspace + DB + seed) | 1-4 | ✅ done (2026-05-04) |
+| Worker scaffold + libs core | 5-13 | em andamento |
 | Click capture | 14-16 | pendente |
 | Webhooks Kiwify + Hotmart | 17-20 | pendente |
 | Frontend (Next.js + login + dashboard) | 21-26 | pendente |
@@ -93,7 +93,13 @@ Atualize esta tabela conforme completa cada bloco.
 
 (Adicionar aqui qualquer escolha de design feita durante implementação que não estava no spec — pra ficar rastreável.)
 
-- (nenhuma ainda)
+### Bloco Fundação (Tasks 1-4) — 2026-05-04
+
+- **Fix SQL em `migrations/001_initial.sql`** (commit `85885e6`): `UNIQUE(... COALESCE(...))` inline em `cost_data` foi convertido pra `CREATE UNIQUE INDEX` separado. Postgres não permite função em UNIQUE inline; semanticamente equivalente pro nosso uso (cost_data não é alvo de FK).
+- **Migration 002 — DEFAULT volátil em `endpoint_token`**: `gen_random_bytes(24)` é volatile, então em prod com dados existentes o ALTER TABLE vai reescrever a tabela. Em dev (tabela vazia) isso não importa. Pra prod, considerar split em 3 statements (ADD nullable → UPDATE → SET NOT NULL) quando rodar contra tabela com dados.
+- **Seed dev refatorado pra `scripts/setup-dev.sh`** (commit `7edc20a`): `auth.users INSERT` direto em SQL foi rejeitado por fragilidade contra upgrades futuros do Supabase. Substituído por orquestração em bash: `supabase db reset --no-seed` → `curl POST /auth/v1/admin/users` (UUID fixo) → `psql` pra inserir workspace+offers+webhook_secrets. Idempotente.
+- **2 serviços Supabase parados no Windows** (`imgproxy`, `pooler`): limitação conhecida do Docker em named pipe. Não-bloqueante pra Fase 1 (não usamos image transforms nem connection pooler).
+- **Code quality nits não-aplicados em `scripts/setup-dev.sh`**: error context explícito no `docker exec`, fail-on-error na verificação. Reviewer aprovou como non-blocking; deixados pra polish posterior se incomodarem.
 
 ---
 
