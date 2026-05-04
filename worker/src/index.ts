@@ -1,7 +1,7 @@
 import type { Env } from './types';
 import { handleHealth } from './routes/health';
 import { handleLtScript } from './routes/lt-script';
-import { handleTrackClick } from './routes/track-click';
+import { handleTrackClick, handleTrackClickOptions } from './routes/track-click';
 import { handleWebhookKiwify } from './routes/webhook-kiwify';
 import { handleWebhookHotmart } from './routes/webhook-hotmart';
 
@@ -12,6 +12,7 @@ export default {
 
     if (method === 'GET' && url.pathname === '/api/health') return handleHealth();
     if (method === 'GET' && url.pathname === '/lt.js') return handleLtScript();
+    if (method === 'OPTIONS' && url.pathname === '/track/click') return handleTrackClickOptions(request, env);
     if (method === 'POST' && url.pathname === '/track/click') return handleTrackClick(request, env);
 
     const kiwify = url.pathname.match(/^\/webhook\/kiwify\/([A-Za-z0-9_-]+)$/);

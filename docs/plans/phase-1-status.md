@@ -111,10 +111,10 @@ Atualize esta tabela conforme completa cada bloco.
 
 ### Bloco Click capture (Tasks 14-16) — 2026-05-04
 
-- **CORS não implementado** em `/track/click`: plano declarou `ALLOWED_TRACKING_ORIGINS` em env mas não wirou a leitura. Em prod cross-origin via fetch (fallback do sendBeacon) vai falhar. Decidido seguir e revisitar no Task 27 ou em prod.
 - **`req.json<T>()` substituído por `(await req.json()) as T`** em `/track/click` por incompatibilidade de typing com a interface Request do pool. Funcionalmente idêntico.
 - **Dead-code `if (...) {}`** no track-click pra documentar "aceita JSON e text/plain (sendBeacon manda como text/plain)". Plan-faithful, lá só pra registro intencional.
 - **57 testes passando** (track-click 4 + lt-script 1 + 52 prior).
+- **CORS implementado** (fix posterior pra desbloquear smoke test): allowlist via `ALLOWED_TRACKING_ORIGINS` lida do env, `OPTIONS /track/click` com preflight 204/403, `Access-Control-Allow-Origin` ecoado em todas as respostas do POST quando origin é permitida. `http://localhost:4000` adicionado ao default em `wrangler.toml.example` e `.dev.vars.example` pra cobrir o smoke test com `http-server`. 75 testes passando após o fix.
 
 ### Bloco Webhooks (Tasks 17-20) — 2026-05-04
 

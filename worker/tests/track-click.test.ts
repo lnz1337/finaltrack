@@ -91,3 +91,43 @@ describe('POST /track/click', () => {
     expect(rows.length).toBe(1);
   });
 });
+
+describe('CORS', () => {
+  it('OPTIONS preflight de origem permitida → 204 + headers', async () => {
+    const res = await SELF.fetch('http://test/track/click', {
+      method: 'OPTIONS',
+      headers: { origin: 'http://localhost:3000' },
+    });
+    expect(res.status).toBe(204);
+    expect(res.headers.get('access-control-allow-origin')).toBe('http://localhost:3000');
+    expect(res.headers.get('access-control-allow-methods')).toContain('POST');
+    expect(res.headers.get('access-control-allow-headers')).toContain('content-type');
+  });
+
+  it('OPTIONS de origem nao permitida → 403', async () => {
+    const res = await SELF.fetch('http://test/track/click', {
+      method: 'OPTIONS',
+      headers: { origin: 'https://malicious.com' },
+    });
+    expect(res.status).toBe(403);
+  });
+
+  it('POST com Origin permitida ecoa ACAO no response', async () => {
+    const res = await SELF.fetch('http://test/track/click', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'user-agent': HUMAN_UA,
+        origin: 'http://localhost:3000',
+      },
+      body: JSON.stringify({
+        workspace_id: WS,
+        click_id: 'tc_cors',
+        visitor_id: 'v',
+        landing_url: 'http://lp',
+      }),
+    });
+    expect(res.status).toBe(204);
+    expect(res.headers.get('access-control-allow-origin')).toBe('http://localhost:3000');
+  });
+});
