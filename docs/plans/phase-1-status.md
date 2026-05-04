@@ -83,7 +83,7 @@ Documente a decisão antes de implementar.
 | Click capture | 14-16 | ✅ done (2026-05-04) — 57 testes passando |
 | Webhooks Kiwify + Hotmart | 17-20 | ✅ done (2026-05-04) — 72 testes passando |
 | Frontend (Next.js + login + dashboard) | 21-26 | ✅ done (2026-05-04) — Next 16 + Tailwind v4 + shadcn |
-| Smoke test E2E | 27 | 📋 checklist pronto em `docs/specs/phase-1-smoke-test.md` (executar manualmente) |
+| Smoke test E2E | 27 | 🔧 fix aplicado (2026-05-04): rota `/auth/callback`, emailRedirectTo, middleware→proxy |
 
 Atualize esta tabela conforme completa cada bloco.
 
@@ -126,6 +126,12 @@ Atualize esta tabela conforme completa cada bloco.
 - **Duplicação ~92% entre `webhook-kiwify.ts` e `webhook-hotmart.ts`**: aceito pra v1 (auth diferentes — HMAC vs Hottok). Refatorar em `processConversion()` helper se aparecer terceira plataforma.
 - **Hottok comparison não é timing-safe** (`!==` direto). Static shared secret tem risco menor de timing attack que HMAC, mas defensivamente vale upgrade pra `timingSafeEqualHex` em v2.
 - **72 testes passando** (webhook-hotmart 3 + webhook-kiwify 5 + hotmart parser 3 + kiwify parser 4 + 57 prior).
+
+### Smoke test login fix — 2026-05-04
+
+- **`app/app/auth/callback/route.ts` criado**: Route Handler GET que recebe `?code=`, chama `supabase.auth.exchangeCodeForSession(code)` e redireciona para `next` (default `/dashboard`). Sem esse handler, o PKCE code-verifier era setado mas o access token nunca era trocado.
+- **`emailRedirectTo` corrigido em `app/app/login/page.tsx`**: apontava para `${origin}/dashboard` (sem handler para PKCE), corrigido para `${origin}/auth/callback?next=/dashboard`.
+- **`app/middleware.ts` renomeado para `app/proxy.ts`**: Next.js 16 deprecou a convencao `middleware.ts` em favor de `proxy.ts`. Export renomeado de `middleware` para `proxy`. Assinatura identica (`request: NextRequest`), mesmo `config.matcher`. Sem mudancas no helper interno `app/lib/supabase/middleware.ts` (nome interno, nao convencao Next).
 
 ### Bloco Frontend (Tasks 21-26) — 2026-05-04
 
