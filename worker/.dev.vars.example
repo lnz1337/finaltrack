@@ -1,3 +1,4 @@
+ENV="development"
 SUPABASE_URL="http://127.0.0.1:54321"
 SUPABASE_SERVICE_ROLE_KEY="<your-supabase-service-role-key>"
 ENCRYPTION_KEY="<64-char-hex-string>"
