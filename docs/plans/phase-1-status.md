@@ -114,7 +114,10 @@ Atualize esta tabela conforme completa cada bloco.
 - **`req.json<T>()` substituído por `(await req.json()) as T`** em `/track/click` por incompatibilidade de typing com a interface Request do pool. Funcionalmente idêntico.
 - **Dead-code `if (...) {}`** no track-click pra documentar "aceita JSON e text/plain (sendBeacon manda como text/plain)". Plan-faithful, lá só pra registro intencional.
 - **57 testes passando** (track-click 4 + lt-script 1 + 52 prior).
-- **CORS implementado** (fix posterior pra desbloquear smoke test): allowlist via `ALLOWED_TRACKING_ORIGINS` lida do env, `OPTIONS /track/click` com preflight 204/403, `Access-Control-Allow-Origin` ecoado em todas as respostas do POST quando origin é permitida. `http://localhost:4000` adicionado ao default em `wrangler.toml.example` e `.dev.vars.example` pra cobrir o smoke test com `http-server`. 75 testes passando após o fix.
+- **CORS implementado** (commit `b46b904`, completado por `3e1529c`): allowlist via `ALLOWED_TRACKING_ORIGINS` lida do env, `OPTIONS /track/click` com preflight 204/403, `Access-Control-Allow-Origin` ecoado em todas as respostas do POST quando origin é permitida. `http://localhost:4000` adicionado ao default em `wrangler.toml.example` e `.dev.vars.example` pra cobrir o smoke test com `http-server`.
+- **sendBeacon CORS fix** (commit `3e1529c`, descoberto durante smoke): `/lt.js` mandava `new Blob([body], { type: 'application/json' })` pro `navigator.sendBeacon`, mas `application/json` NÃO é CORS-safelisted — browser silenciosamente bloqueava com `false` retorno. Fix: Blob type → `text/plain` (safelisted, sem preflight) + capturar return value e cair pra `fetch keepalive` se falhar. Worker passou a aceitar `Content-Type: text/plain` explicitamente via `req.text()` + `JSON.parse()` (substituiu o dead-code `if`).
+- **Test data isolation** (commit `6bf626e`): cleanup era só `beforeEach`, então o ÚLTIMO teste de cada suite deixava lixo no banco real (ex: `tc_cors`, `match_d` apareceram no smoke). Refatorado: prefixos uniformes `test_*` (clicks) e `TEST-*` (conversions external_order_id) + `afterAll` em todas as suites pra garantir cleanup mesmo se teste quebra.
+- **77 testes passando** (track-click 5 + lt-script 1 + 71 prior).
 
 ### Bloco Webhooks (Tasks 17-20) — 2026-05-04
 

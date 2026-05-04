@@ -200,7 +200,7 @@ Studio → criar outro user (`outro@local`, auto-confirm). Logar em incógnito.
 ## Step 12 — Fase 1 aprovada
 
 - [ ] Todos os checkboxes acima ✅
-- [ ] `pnpm --filter ./worker test` → 72 verde
+- [ ] `pnpm --filter ./worker test` → 77 verde
 - [ ] `pnpm --filter ./app build` → 0 erro
 - [ ] Commitar este arquivo com `docs: smoke test fase 1 aprovado`
 
@@ -210,7 +210,6 @@ Studio → criar outro user (`outro@local`, auto-confirm). Logar em incógnito.
 
 Da execução documentada em `docs/plans/phase-1-status.md`:
 
-- **`/track/click` sem CORS headers** — em prod, fetch fallback do `sendBeacon` vai falhar cross-origin. Plano declarou `ALLOWED_TRACKING_ORIGINS` mas não wirou. Ajustar antes de pôr no ar.
 - **Volatile DEFAULT em migration 002** — re-rodar contra prod com dados existentes vai causar table rewrite. Em prod considerar split em 3 statements (ADD nullable → UPDATE → SET NOT NULL).
 - **Hottok comparison não-timing-safe** em webhook-hotmart — upgrade defensivo pra v2.
 - **Code duplication ~92%** entre `webhook-kiwify` e `webhook-hotmart` — refatorar pra `processConversion()` se aparecer 3ª plataforma.
