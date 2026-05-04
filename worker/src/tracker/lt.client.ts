@@ -79,9 +79,14 @@ export const LT_CLIENT_SOURCE = `
 
     try {
       var body = JSON.stringify(payload);
-      if (navigator.sendBeacon) {
-        navigator.sendBeacon(workerOrigin + '/track/click', new Blob([body], { type: 'application/json' }));
-      } else {
+      // Design: sendBeacon usa text/plain (MIME CORS-safelisted) para evitar preflight.
+      // Capturamos o retorno: false significa que o browser bloqueou (ex. body muito grande,
+      // ou sem permissão). Nesse caso fazemos fallback para fetch com keepalive:true,
+      // que dispara preflight mas garante a entrega mesmo em navegação.
+      var sent = navigator.sendBeacon
+        ? navigator.sendBeacon(workerOrigin + '/track/click', new Blob([body], { type: 'text/plain' }))
+        : false;
+      if (!sent) {
         fetch(workerOrigin + '/track/click', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },

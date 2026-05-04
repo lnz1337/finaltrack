@@ -57,15 +57,13 @@ export async function handleTrackClick(req: Request, env: Env): Promise<Response
     return new Response(null, { status: 204, headers: extraHeaders });
   }
 
-  // sendBeacon manda como text/plain; aceitar ambos (req.json() parseia os bytes independente do content-type)
-  if (req.headers.get('content-type')?.includes('application/json') === false &&
-      req.headers.get('content-type')?.includes('text/plain') === false) {
-    // aceitar ambos
-  }
-
+  // Aceita application/json (fetch) e text/plain (sendBeacon sem preflight).
+  // Usamos req.text() + JSON.parse() explicitamente para garantir parse
+  // independente do Content-Type declarado pelo browser.
   let body: ClickPayload;
   try {
-    body = (await req.json()) as ClickPayload;
+    const text = await req.text();
+    body = JSON.parse(text) as ClickPayload;
   } catch {
     return new Response('invalid json', { status: 400, headers: extraHeaders });
   }

@@ -130,4 +130,37 @@ describe('CORS', () => {
     expect(res.status).toBe(204);
     expect(res.headers.get('access-control-allow-origin')).toBe('http://localhost:3000');
   });
+
+  it('aceita Content-Type: text/plain (sendBeacon style)', async () => {
+    const res = await SELF.fetch('http://test/track/click', {
+      method: 'POST',
+      headers: {
+        'content-type': 'text/plain',
+        'user-agent': HUMAN_UA,
+        origin: 'http://localhost:3000',
+      },
+      body: JSON.stringify({
+        workspace_id: WS,
+        click_id: 'tc_textplain',
+        visitor_id: 'v',
+        landing_url: 'http://lp',
+      }),
+    });
+    expect(res.status).toBe(204);
+    expect(res.headers.get('access-control-allow-origin')).toBe('http://localhost:3000');
+  });
+
+  it('POST 400 (campo faltando) com Origin permitida ecoa ACAO no response', async () => {
+    const res = await SELF.fetch('http://test/track/click', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'user-agent': HUMAN_UA,
+        origin: 'http://localhost:3000',
+      },
+      body: JSON.stringify({ click_id: 'tc_400_cors', visitor_id: 'v', landing_url: 'http://lp' }),
+    });
+    expect(res.status).toBe(400);
+    expect(res.headers.get('access-control-allow-origin')).toBe('http://localhost:3000');
+  });
 });
