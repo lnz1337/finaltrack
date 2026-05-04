@@ -3,6 +3,7 @@ import { handleHealth } from './routes/health';
 import { handleLtScript } from './routes/lt-script';
 import { handleTrackClick } from './routes/track-click';
 import { handleWebhookKiwify } from './routes/webhook-kiwify';
+import { handleWebhookHotmart } from './routes/webhook-hotmart';
 
 export default {
   async fetch(request: Request, env: Env, _ctx: ExecutionContext): Promise<Response> {
@@ -15,6 +16,9 @@ export default {
 
     const kiwify = url.pathname.match(/^\/webhook\/kiwify\/([A-Za-z0-9_-]+)$/);
     if (method === 'POST' && kiwify) return handleWebhookKiwify(request, env, kiwify[1]);
+
+    const hotmart = url.pathname.match(/^\/webhook\/hotmart\/([A-Za-z0-9_-]+)$/);
+    if (method === 'POST' && hotmart) return handleWebhookHotmart(request, env, hotmart[1]);
 
     return new Response('Not Found', { status: 404 });
   },
