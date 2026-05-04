@@ -79,8 +79,8 @@ Documente a decisão antes de implementar.
 | Bloco | Tasks | Status |
 |---|---|---|
 | Fundação (workspace + DB + seed) | 1-4 | ✅ done (2026-05-04) |
-| Worker scaffold + libs core | 5-13 | em andamento |
-| Click capture | 14-16 | pendente |
+| Worker scaffold + libs core | 5-13 | ✅ done (2026-05-04) — 52 testes passando |
+| Click capture | 14-16 | em andamento |
 | Webhooks Kiwify + Hotmart | 17-20 | pendente |
 | Frontend (Next.js + login + dashboard) | 21-26 | pendente |
 | Smoke test E2E | 27 | pendente |
@@ -100,6 +100,14 @@ Atualize esta tabela conforme completa cada bloco.
 - **Seed dev refatorado pra `scripts/setup-dev.sh`** (commit `7edc20a`): `auth.users INSERT` direto em SQL foi rejeitado por fragilidade contra upgrades futuros do Supabase. Substituído por orquestração em bash: `supabase db reset --no-seed` → `curl POST /auth/v1/admin/users` (UUID fixo) → `psql` pra inserir workspace+offers+webhook_secrets. Idempotente.
 - **2 serviços Supabase parados no Windows** (`imgproxy`, `pooler`): limitação conhecida do Docker em named pipe. Não-bloqueante pra Fase 1 (não usamos image transforms nem connection pooler).
 - **Code quality nits não-aplicados em `scripts/setup-dev.sh`**: error context explícito no `docker exec`, fail-on-error na verificação. Reviewer aprovou como non-blocking; deixados pra polish posterior se incomodarem.
+
+### Bloco Worker (Tasks 5-13) — 2026-05-04
+
+- **Vitest config tem 2 ajustes além do plano** (commit `fb7c5a0`): `compatibilityDate` e `main` no bloco miniflare. Necessários porque `@cloudflare/vitest-pool-workers@0.5.41` não auto-infere de `wrangler.toml.example`. Valores espelham o `wrangler.toml.example`.
+- **Root `package.json` tem `pnpm.onlyBuiltDependencies`** (esbuild, sharp, workerd) — pnpm 10 exige allow-list explícito pra postinstall.
+- **`worker/.dev.vars` autoload pelo vitest pool** (commit `15f080b`): testes de integração (supabase, matching) leem `env.SUPABASE_URL` etc. direto via `cloudflare:test`. Sem wiring extra.
+- **lib/utm.ts ganhou guard** (commit `f4e0e22`): rejeita input com nome vazio após pipe inicial (`'|123'`). Plano original aceitava; reviewer flagou; user aprovou ajuste.
+- **52 testes passando** ao fim do bloco (health 2 + utm 7 + cookies 6 + ua 16 + geo 3 + crypto 7 + supabase 3 + dedup 3 + matching 5).
 
 ---
 
