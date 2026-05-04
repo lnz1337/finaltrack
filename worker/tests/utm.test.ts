@@ -28,4 +28,12 @@ describe('parseUtmPipe', () => {
   it('trim de espaços ao redor', () => {
     expect(parseUtmPipe('  Foo | 42 ')).toEqual({ name: 'Foo', id: '42' });
   });
+
+  it('retorna undefined quando nome fica vazio (pipe inicial)', () => {
+    expect(parseUtmPipe('|123')).toBeUndefined();
+  });
+
+  it('retorna undefined quando só há pipes/espaços', () => {
+    expect(parseUtmPipe('  |  ')).toBeUndefined();
+  });
 });

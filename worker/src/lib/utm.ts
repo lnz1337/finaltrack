@@ -14,6 +14,7 @@ export function parseUtmPipe(value: string | undefined): ParsedPipe | undefined 
   }
 
   const name = trimmed.slice(0, lastPipe).trim();
+  if (!name) return undefined;
   const id = trimmed.slice(lastPipe + 1).trim();
   return id ? { name, id } : { name };
 }
