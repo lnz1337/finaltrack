@@ -1,0 +1,26 @@
+name = "finaltrack-worker"
+main = "src/index.ts"
+compatibility_date = "2024-09-01"
+compatibility_flags = ["nodejs_compat"]
+
+[vars]
+ENV = "development"
+ALLOWED_TRACKING_ORIGINS = "http://localhost:3000,http://localhost:4000,https://example.com"
+
+# Secrets (rodar `wrangler secret put` em prod, ou .dev.vars em dev):
+# SUPABASE_URL
+# SUPABASE_SERVICE_ROLE_KEY
+# ENCRYPTION_KEY              # 32 bytes hex
+# UPSTASH_REDIS_REST_URL
+# UPSTASH_REDIS_REST_TOKEN
+# DEV_KIWIFY_SECRET           # só em dev
+# DEV_HOTMART_SECRET          # só em dev
+
+# Pra dev local, criar arquivo .dev.vars (gitignored) com:
+# SUPABASE_URL="http://localhost:54321"
+# SUPABASE_SERVICE_ROLE_KEY="<service_role_key_local>"
+# ENCRYPTION_KEY="0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+# UPSTASH_REDIS_REST_URL=""   # pode ficar vazio em dev se mock
+# UPSTASH_REDIS_REST_TOKEN=""
+# DEV_KIWIFY_SECRET="kiwify_test_secret_123"
+# DEV_HOTMART_SECRET="hotmart_test_hottok_456"

@@ -1,0 +1,10 @@
+{
+  "webhook_event_type": "order_refunded",
+  "order_id": "ORD-AAA-001",
+  "order_status": "refunded",
+  "created_at": "2026-05-04T10:00:00Z",
+  "Customer": { "email": "maria@exemplo.com" },
+  "Product": { "product_id": "kiwify-product-1" },
+  "Commissions": { "charge_amount": "97.00", "currency_type": "BRL" },
+  "TrackingParameters": { "xcod": "click_xyz_789" }
+}

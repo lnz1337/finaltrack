@@ -1,0 +1,10 @@
+{
+  "webhook_event_type": "pix_created",
+  "order_id": "ORD-AAA-002",
+  "order_status": "waiting_payment",
+  "created_at": "2026-05-03T12:31:00Z",
+  "Customer": { "email": "joao@exemplo.com", "mobile": "11988887777" },
+  "Product": { "product_id": "kiwify-product-1" },
+  "Commissions": { "charge_amount": "97.00", "currency_type": "BRL" },
+  "TrackingParameters": { "xcod": "click_pix_001" }
+}

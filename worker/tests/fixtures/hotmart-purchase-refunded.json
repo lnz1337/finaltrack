@@ -1,0 +1,15 @@
+{
+  "id": "evt-002",
+  "event": "PURCHASE_REFUNDED",
+  "creation_date": 1746358200000,
+  "data": {
+    "purchase": {
+      "transaction": "HP-AAA-001",
+      "status": "REFUNDED",
+      "price": { "value": 97.0, "currency_value": "BRL" },
+      "tracking": { "external_code": "click_hot_001" }
+    },
+    "buyer": { "email": "cliente@hot.com" },
+    "product": { "id": "hotmart-product-1" }
+  }
+}

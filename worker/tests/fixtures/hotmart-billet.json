@@ -1,0 +1,15 @@
+{
+  "id": "evt-003",
+  "event": "PURCHASE_BILLET_PRINTED",
+  "creation_date": 1746271800000,
+  "data": {
+    "purchase": {
+      "transaction": "HP-AAA-002",
+      "status": "WAITING_PAYMENT",
+      "price": { "value": 97.0, "currency_value": "BRL" },
+      "tracking": { "external_code": "click_hot_002" }
+    },
+    "buyer": { "email": "outro@hot.com" },
+    "product": { "id": "hotmart-product-1" }
+  }
+}

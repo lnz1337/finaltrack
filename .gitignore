@@ -1,24 +1,24 @@
 # Dependencies
 node_modules/
-.pnpm-store/
+.pnp.*
 
-# Build outputs
+# Build output
 .next/
+out/
 dist/
-build/
-.vercel/
 .wrangler/
 
-# Environment & secrets
+# Env / secrets
 .env
 .env.local
 .env.*.local
-wrangler.toml
-.dev.vars
+worker/wrangler.toml
+worker/.dev.vars
 
-# Supabase
+# Supabase local
 supabase/.branches/
 supabase/.temp/
+supabase/snippets/
 
 # OS
 .DS_Store

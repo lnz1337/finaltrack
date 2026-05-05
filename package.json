@@ -1,0 +1,24 @@
+{
+  "name": "finaltrack",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "worker:dev": "pnpm --filter ./worker dev",
+    "worker:test": "pnpm --filter ./worker test",
+    "worker:deploy": "pnpm --filter ./worker deploy",
+    "app:dev": "pnpm --filter ./app dev",
+    "app:build": "pnpm --filter ./app build",
+    "db:start": "supabase start",
+    "db:stop": "supabase stop",
+    "db:reset": "supabase db reset",
+    "db:types": "supabase gen types typescript --local > app/lib/types/database.ts",
+    "dev:reset": "bash scripts/setup-dev.sh"
+  },
+  "engines": {
+    "node": ">=20",
+    "pnpm": ">=9"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": ["esbuild", "sharp", "workerd"]
+  }
+}

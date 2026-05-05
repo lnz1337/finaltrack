@@ -1,0 +1,17 @@
+{
+  "id": "evt-001",
+  "event": "PURCHASE_APPROVED",
+  "creation_date": 1746271800000,
+  "data": {
+    "purchase": {
+      "transaction": "HP-AAA-001",
+      "approved_date": 1746271800000,
+      "status": "APPROVED",
+      "price": { "value": 97.0, "currency_value": "BRL" },
+      "tracking": { "external_code": "click_hot_001", "source": "google" },
+      "checkout_country": { "iso": "BR" }
+    },
+    "buyer": { "email": "Cliente@HOT.com", "name": "Cliente Hot", "checkout_phone": "+5511988887777" },
+    "product": { "id": "hotmart-product-1", "name": "Té Drenador" }
+  }
+}
