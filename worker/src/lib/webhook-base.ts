@@ -64,5 +64,6 @@ export async function buildConversionRow(
     match_method: match.match_method,
     raw_payload: draft.raw,
     occurred_at: draft.occurred_at,
+    is_test: draft.is_test ?? false,
   };
 }

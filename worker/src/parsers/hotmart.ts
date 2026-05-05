@@ -76,6 +76,8 @@ export function parseHotmart(raw: unknown): ConversionDraft {
     gbraid_from_payload,
     occurred_at,
     offer_external_id: product?.id !== undefined ? String(product.id) : undefined,
+    // Hotmart nao expoe flag de teste no payload — producao sempre.
+    is_test: false,
     raw,
   };
 }
