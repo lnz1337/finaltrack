@@ -133,6 +133,18 @@ VALUES (
 )
 ON CONFLICT (id) DO NOTHING;
 
+INSERT INTO offers (id, workspace_id, name, checkout_platform, external_product_id, default_currency, cogs_pct)
+VALUES (
+  '00000000-0000-0000-0000-000000000012',
+  '00000000-0000-0000-0000-000000000001',
+  'Té Drenador (Payt)',
+  'payt',
+  'payt-product-1',
+  'BRL',
+  0.30
+)
+ON CONFLICT (id) DO NOTHING;
+
 INSERT INTO webhook_secrets (workspace_id, platform, secret_encrypted, secret_iv, endpoint_token)
 VALUES
   (
@@ -148,6 +160,13 @@ VALUES
     'DEV_PLACEHOLDER_ENCRYPTED',
     'DEV_PLACEHOLDER_IV',
     'dev_hotmart_token_bbbbbbbbbbbbbbbb'
+  ),
+  (
+    '00000000-0000-0000-0000-000000000001',
+    'payt',
+    'DEV_PLACEHOLDER_ENCRYPTED',
+    'DEV_PLACEHOLDER_IV',
+    'dev_payt_token_cccccccccccccccc'
   )
 ON CONFLICT (workspace_id, platform) DO NOTHING;
 
@@ -179,8 +198,8 @@ echo "============================================================"
 echo "  FinalTrack — Dev environment ready"
 echo "============================================================"
 echo "  workspaces    : ${WS_COUNT} (expected: 1)"
-echo "  offers        : ${OFFER_COUNT} (expected: 2)"
-echo "  webhook_secrets: ${WH_COUNT} (expected: 2)"
+echo "  offers        : ${OFFER_COUNT} (expected: 3)"
+echo "  webhook_secrets: ${WH_COUNT} (expected: 3)"
 echo "  auth.users    : ${USER_EXISTS} dev user (expected: 1)"
 echo ""
 echo "  Login at : http://127.0.0.1:54323  (Supabase Studio)"

@@ -1,0 +1,23 @@
+{
+  "integration_key": "a74cf3440b21998dc78c8f35c72f124e",
+  "transaction_id": "TX-BILLED-001",
+  "cart_id": "CART-BILLED-001",
+  "seller_id": "AR6D4X",
+  "test": false,
+  "status": "billed",
+  "type": "order",
+  "tangible": true,
+  "customer": { "fake_email": false, "email": "user@example.com" },
+  "product": { "code": "PROD-15", "quantity": 1, "price": 9700 },
+  "link": { "sources": [], "query_params": [] },
+  "transaction": {
+    "created_at": "2026-04-15 10:00:00",
+    "updated_at": "2026-05-06 14:00:00",
+    "payment_method": "credit_card",
+    "payment_status": "paid",
+    "total_price": 9700,
+    "paid_at": "2026-04-15 10:01:00"
+  },
+  "started_at": "2026-04-15 09:55:00",
+  "updated_at": "2026-05-06 14:00:00"
+}

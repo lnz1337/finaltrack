@@ -206,7 +206,7 @@ CREATE TABLE conversions (
   offer_id UUID REFERENCES offers(id) ON DELETE SET NULL,
 
   external_order_id TEXT NOT NULL,
-  conversion_type TEXT NOT NULL,  -- pix_generated, billet_generated, paid, refund, chargeback, abandoned
+  conversion_type TEXT NOT NULL,  -- pix_generated, billet_generated, paid, refund, chargeback, abandoned, expired
   amount NUMERIC NOT NULL,
   currency TEXT NOT NULL DEFAULT 'USD',
 

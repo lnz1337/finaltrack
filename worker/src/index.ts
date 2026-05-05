@@ -4,6 +4,7 @@ import { handleLtScript } from './routes/lt-script';
 import { handleTrackClick, handleTrackClickOptions } from './routes/track-click';
 import { handleWebhookKiwify } from './routes/webhook-kiwify';
 import { handleWebhookHotmart } from './routes/webhook-hotmart';
+import { handleWebhookPayt } from './routes/webhook-payt';
 
 export default {
   async fetch(request: Request, env: Env, _ctx: ExecutionContext): Promise<Response> {
@@ -20,6 +21,9 @@ export default {
 
     const hotmart = url.pathname.match(/^\/webhook\/hotmart\/([A-Za-z0-9_-]+)$/);
     if (method === 'POST' && hotmart) return handleWebhookHotmart(request, env, hotmart[1]);
+
+    const payt = url.pathname.match(/^\/webhook\/payt\/([A-Za-z0-9_-]+)$/);
+    if (method === 'POST' && payt) return handleWebhookPayt(request, env, payt[1]);
 
     return new Response('Not Found', { status: 404 });
   },

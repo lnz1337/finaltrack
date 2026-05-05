@@ -8,6 +8,7 @@ export interface Env {
   UPSTASH_REDIS_REST_TOKEN: string;
   DEV_KIWIFY_SECRET?: string;
   DEV_HOTMART_SECRET?: string;
+  DEV_PAYT_SECRET?: string;
 }
 
 export type MatchMethod = 'click_id' | 'gclid_in_payload' | 'unmatched';
@@ -18,7 +19,8 @@ export type ConversionType =
   | 'paid'
   | 'refund'
   | 'chargeback'
-  | 'abandoned';
+  | 'abandoned'
+  | 'expired';
 
 export interface ConversionDraft {
   external_order_id: string;
@@ -36,6 +38,10 @@ export interface ConversionDraft {
   occurred_at: string;
   raw: unknown;
   offer_external_id?: string;
+  // Flag de produção: true = evento de teste (Payt envia test:bool no payload).
+  // Default semântico false quando undefined — buildConversionRow propaga ?? false.
+  // Kiwify/Hotmart hardcodam false explicitamente até expor flag equivalente.
+  is_test?: boolean;
 }
 
 export interface ClickRecord {

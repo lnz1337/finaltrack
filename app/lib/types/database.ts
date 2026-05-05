@@ -372,6 +372,7 @@ export type Database = {
           customer_phone_hash: string | null
           external_order_id: string
           id: string
+          is_test: boolean
           match_method: string | null
           occurred_at: string | null
           offer_id: string | null
@@ -389,6 +390,7 @@ export type Database = {
           customer_phone_hash?: string | null
           external_order_id: string
           id?: string
+          is_test?: boolean
           match_method?: string | null
           occurred_at?: string | null
           offer_id?: string | null
@@ -406,6 +408,7 @@ export type Database = {
           customer_phone_hash?: string | null
           external_order_id?: string
           id?: string
+          is_test?: boolean
           match_method?: string | null
           occurred_at?: string | null
           offer_id?: string | null

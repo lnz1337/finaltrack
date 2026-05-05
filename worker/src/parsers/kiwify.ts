@@ -64,6 +64,8 @@ export function parseKiwify(raw: unknown): ConversionDraft {
     gbraid_from_payload,
     occurred_at: p.created_at ?? new Date().toISOString(),
     offer_external_id: p.Product?.product_id,
+    // Kiwify nao expoe flag de teste no payload — producao sempre.
+    is_test: false,
     raw,
   };
 }

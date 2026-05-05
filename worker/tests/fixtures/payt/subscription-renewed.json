@@ -1,0 +1,21 @@
+{
+  "integration_key": "a74cf3440b21998dc78c8f35c72f124e",
+  "transaction_id": "TX-SUB-RENEW-001",
+  "seller_id": "AR6D4X",
+  "test": false,
+  "status": "subscription_renewed",
+  "type": "order",
+  "customer": { "fake_email": false, "email": "subscriber@example.com" },
+  "product": { "code": "PROD-SUB-1", "quantity": 1, "price": 4900 },
+  "link": { "sources": [], "query_params": [] },
+  "transaction": {
+    "created_at": "2026-05-05 20:00:00",
+    "updated_at": "2026-05-05 20:01:00",
+    "payment_method": "credit_card",
+    "payment_status": "paid",
+    "total_price": 4900,
+    "paid_at": "2026-05-05 20:01:00"
+  },
+  "started_at": "2026-05-05 20:00:00",
+  "updated_at": "2026-05-05 20:01:00"
+}
