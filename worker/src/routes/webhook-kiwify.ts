@@ -1,9 +1,12 @@
 import type { Env } from '../types';
 import { createSupabaseClient } from '../lib/supabase';
-import { verifyHmacSha256, hashEmail, hashPhone, sha256Hex } from '../lib/crypto';
+import { verifyHmacSha256 } from '../lib/crypto';
 import { createDedup } from '../lib/dedup';
 import { resolveWebhookSecret } from '../lib/webhook-secret';
 import { matchConversion } from '../lib/matching';
+import { findOriginalConversion } from '../lib/conversions';
+import { checkAdjustmentWindow } from '../lib/conversion-window';
+import { buildDedupKey, resolveOfferId, buildConversionRow } from '../lib/webhook-base';
 import { parseKiwify } from '../parsers/kiwify';
 
 export async function handleWebhookKiwify(req: Request, env: Env, endpointToken: string): Promise<Response> {
@@ -16,11 +19,9 @@ export async function handleWebhookKiwify(req: Request, env: Env, endpointToken:
   const ok = await verifyHmacSha256(resolved.secret_plaintext, rawBody, sig);
   if (!ok) return new Response('invalid signature', { status: 401 });
 
-  // dedup
   const dedup = createDedup({ url: env.UPSTASH_REDIS_REST_URL, token: env.UPSTASH_REDIS_REST_TOKEN });
-  const dedupKey = `wh:kiwify:${await sha256Hex(resolved.workspace_id + rawBody)}`;
-  const isDup = await dedup.checkAndMark(dedupKey, 86400);
-  if (isDup) return new Response(null, { status: 200 });
+  const dedupKey = await buildDedupKey('kiwify', resolved.workspace_id, rawBody);
+  if (await dedup.checkAndMark(dedupKey, 86400)) return new Response(null, { status: 200 });
 
   let payload: unknown;
   try {
@@ -36,36 +37,22 @@ export async function handleWebhookKiwify(req: Request, env: Env, endpointToken:
     gclid_from_payload: draft.gclid_from_payload,
   });
 
-  // resolver offer_id pelo external_product_id
-  let offer_id: string | null = null;
-  if (draft.offer_external_id) {
-    const offers = await sb.select<{ id: string }>('offers', {
-      workspace_id: `eq.${resolved.workspace_id}`,
-      external_product_id: `eq.${draft.offer_external_id}`,
-      checkout_platform: 'eq.kiwify',
-      select: 'id',
-      limit: '1',
-    });
-    offer_id = offers[0]?.id ?? null;
-  }
-
-  const row = {
-    workspace_id: resolved.workspace_id,
-    click_id: match.click_id,
-    offer_id,
-    external_order_id: draft.external_order_id,
-    conversion_type: draft.conversion_type,
-    amount: draft.amount,
-    currency: draft.currency,
-    customer_email_hash: draft.customer_email ? await hashEmail(draft.customer_email) : null,
-    customer_phone_hash: draft.customer_phone ? await hashPhone(draft.customer_phone) : null,
-    customer_first_name_hash: draft.customer_first_name ? await sha256Hex(draft.customer_first_name.trim().toLowerCase()) : null,
-    customer_last_name_hash: draft.customer_last_name ? await sha256Hex(draft.customer_last_name.trim().toLowerCase()) : null,
-    match_method: match.match_method,
-    raw_payload: draft.raw,
-    occurred_at: draft.occurred_at,
-  };
+  const offer_id = await resolveOfferId(sb, resolved.workspace_id, draft.offer_external_id, 'kiwify');
+  const row = await buildConversionRow(resolved.workspace_id, draft, match, offer_id);
 
   await sb.insert('conversions', row, { onConflict: 'workspace_id,external_order_id,conversion_type' });
+
+  // Scaffold Fase 3: refund/chargeback fora da janela 55d → warn (sem bloquear o webhook).
+  if (draft.conversion_type === 'refund' || draft.conversion_type === 'chargeback') {
+    const original = await findOriginalConversion(sb, resolved.workspace_id, draft.external_order_id);
+    checkAdjustmentWindow({
+      platform: 'kiwify',
+      conversionType: draft.conversion_type,
+      originalConversion: original,
+      externalOrderId: draft.external_order_id,
+      workspaceId: resolved.workspace_id,
+    });
+  }
+
   return new Response(null, { status: 200 });
 }
