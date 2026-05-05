@@ -143,6 +143,31 @@ Atualize esta tabela conforme completa cada bloco.
 - **Cookies do Supabase SSR** funcionam com `await cookies()` em Next 16 (já era async desde Next 15).
 - Build passa em `pnpm --filter ./app build`. Sem testes automatizados (frontend é coberto pelo smoke).
 
+### Gotchas Fase 1 descobertos no smoke test — 2026-05-04
+
+Bugs encadeados resolvidos durante execução manual do E2E (Steps 10-12). Todos documentados aqui pra não cair de novo.
+
+1. **`supabase/config.toml` — `additional_redirect_urls` rejeita silenciosamente.** Default era `https://127.0.0.1:3000` (https sem path). Fix: `["http://127.0.0.1:3000/**", "http://localhost:3000/**"]`. Sintoma: magic link redirecionava pra raiz em vez do callback.
+
+2. **Inbucket SMTP trava mesmo com healthcheck verde.** Healthcheck só testa porta HTTP (8025), não SMTP (2500). Fix: `docker restart supabase_inbucket_FinalTrack`. Sintoma: GoTrue retorna 504 timeout em `/auth/v1/otp` após criar o user no Postgres.
+
+3. **Next 16 bloqueia HMR cross-origin entre `127.0.0.1` e `localhost`.** Fix: `allowedDevOrigins: ['127.0.0.1', 'localhost', '192.168.0.8']` em `next.config.ts`. Sintoma: WebSocket HMR falha com `ERR_INVALID_HTTP_RESPONSE`, submit do form não dispara nada visível.
+
+4. **`new URL(request.url).origin` em route handler do Next 16 normaliza `127.0.0.1` → `localhost`.** Fix: usar `process.env.NEXT_PUBLIC_SITE_URL` como origin canônico no callback. Sintoma: cookie de sessão setado em `127.0.0.1`, redirect manda browser pra `localhost`, browser não envia cookie, dashboard cai pra login (loop).
+
+5. **`middleware.ts → proxy.ts` é renomeação real do Next 16.** A função também precisa ser renomeada (`export function proxy()`). Já estava correto no código, mas vale documentar.
+
+6. **Não testar RLS via psql + `SET request.jwt.claims`.** O `auth.uid()` do Supabase lê via PostgREST HTTP wrapper, não GUC. psql impersonation sempre retorna 0 rows independente da policy. Métodos válidos: (a) UI logada, (b) curl com Bearer JWT real, (c) `service_role` pra bypassar RLS como controle.
+
+**Anti-pattern do chat (não é bug do código):** paste de código com `@` ou `.` em strings pode virar markdown link `[texto](url)` na renderização. Validar com `xxd` ou `wc -l + grep -n` quando suspeitar.
+
+### Tech debts conhecidos
+
+- **`tests/dedup.test.ts` e demais usando `cloudflare:test` runner mostram erros TS** de tuple length 0 e RequestInit conversion. Origem: módulo virtual `cloudflare:test` não exporta tipos no `@cloudflare/vitest-pool-workers` atual. Sem impacto em runtime — testes passam. Workaround temporário ou aguardar fix upstream.
+- **Insert de `conversions` não retorna UUID atualmente.** O wrapper `worker/src/lib/supabase.ts` hardcoda `Prefer: return=minimal`. Convenção do wrapper, não limitação do PostgREST (que suporta `return=representation`). Fase 3 vai precisar do id retornado pra criar `conversion_uploads` — investigar uso de `.select()` pós-insert ou expor opção `returnRepresentation` no wrapper quando essa fase começar.
+- **Smoke tests de `webhook-kiwify`/`webhook-hotmart` cobrem refund/chargeback paths sem inserir 'paid' prévio.** `checkAdjustmentWindow` exit-early (`originalConversion=null`) preserva green sem testar o warn path explicitamente. Ao refatorar `webhook-base.ts` (Seção 4 do handoff), considerar fixtures que incluem 'paid' anterior pra exercitar checagem de janela end-to-end.
+- **Migration 002 usa volatile DEFAULT em `ALTER ADD COLUMN`.** Em prod com volume, splittar em 3 statements (ALTER ADD nullable → UPDATE backfill → ALTER SET NOT NULL). Documentado no header do arquivo `supabase/migrations/20260503000002_webhook_endpoint_token.sql`.
+
 ---
 
 ## Como recuperar artefatos da conversa de planejamento
