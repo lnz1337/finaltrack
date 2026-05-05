@@ -1,0 +1,20 @@
+{
+  "integration_key": "a74cf3440b21998dc78c8f35c72f124e",
+  "transaction_id": "TX-BIL-GEN-001",
+  "cart_id": "CART-004",
+  "seller_id": "AR6D4X",
+  "test": false,
+  "status": "waiting_payment",
+  "type": "order",
+  "customer": { "fake_email": false, "email": "user@example.com" },
+  "product": { "code": "PROD-4", "name": "Curso", "quantity": 1, "price": 19700 },
+  "link": { "sources": [], "query_params": [] },
+  "transaction": {
+    "created_at": "2026-05-05 15:00:00",
+    "payment_method": "boleto",
+    "payment_status": "waiting_payment",
+    "total_price": 19700
+  },
+  "started_at": "2026-05-05 15:00:00",
+  "updated_at": "2026-05-05 15:00:00"
+}

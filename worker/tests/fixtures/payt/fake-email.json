@@ -1,0 +1,25 @@
+{
+  "integration_key": "a74cf3440b21998dc78c8f35c72f124e",
+  "transaction_id": "TX-FAKE-001",
+  "cart_id": "CART-FAKE-001",
+  "seller_id": "AR6D4X",
+  "test": false,
+  "status": "paid",
+  "type": "order",
+  "customer": {
+    "fake_email": true,
+    "email": "noreply-fake@checkout.payt.com.br",
+    "phone": "+5511999990000"
+  },
+  "product": { "code": "PROD-13", "quantity": 1, "price": 9700 },
+  "link": { "sources": [], "query_params": [] },
+  "transaction": {
+    "created_at": "2026-05-06 12:00:00",
+    "payment_method": "credit_card",
+    "payment_status": "paid",
+    "total_price": 9700,
+    "paid_at": "2026-05-06 12:00:01"
+  },
+  "started_at": "2026-05-06 12:00:00",
+  "updated_at": "2026-05-06 12:00:01"
+}

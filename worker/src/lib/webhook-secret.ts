@@ -34,6 +34,7 @@ export async function resolveWebhookSecret(
     const plain =
       platform === 'kiwify' ? env.DEV_KIWIFY_SECRET :
       platform === 'hotmart' ? env.DEV_HOTMART_SECRET :
+      platform === 'payt' ? env.DEV_PAYT_SECRET :
       undefined;
     if (!plain) return null;
     return { workspace_id: row.workspace_id, platform, secret_plaintext: plain };

@@ -1,0 +1,28 @@
+{
+  "integration_key": "a74cf3440b21998dc78c8f35c72f124e",
+  "transaction_id": "TX-UTM-001",
+  "cart_id": "CART-UTM-001",
+  "seller_id": "AR6D4X",
+  "test": false,
+  "status": "paid",
+  "type": "order",
+  "customer": { "fake_email": false, "email": "user@example.com" },
+  "product": { "code": "PROD-11", "quantity": 1, "price": 9700 },
+  "link": {
+    "sources": {
+      "utm_source": "google",
+      "utm_medium": "cpc",
+      "utm_campaign": "summer-sale"
+    },
+    "query_params": []
+  },
+  "transaction": {
+    "created_at": "2026-05-06 10:00:00",
+    "payment_method": "credit_card",
+    "payment_status": "paid",
+    "total_price": 9700,
+    "paid_at": "2026-05-06 10:00:01"
+  },
+  "started_at": "2026-05-06 10:00:00",
+  "updated_at": "2026-05-06 10:00:01"
+}

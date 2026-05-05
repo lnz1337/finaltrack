@@ -1,0 +1,17 @@
+{
+  "integration_key": "a74cf3440b21998dc78c8f35c72f124e",
+  "cart_id": "CART-LOST-001",
+  "seller_id": "AR6D4X",
+  "test": false,
+  "status": "lost_cart",
+  "type": "abandoned-cart",
+  "customer": { "fake_email": false, "email": "user@example.com" },
+  "product": { "code": "PROD-8", "quantity": 1, "price": 9700 },
+  "link": { "sources": [], "query_params": [] },
+  "transaction": {
+    "payment_method": "credit_card",
+    "total_price": 9700
+  },
+  "started_at": "2026-05-05 19:00:00",
+  "updated_at": "2026-05-05 19:07:00"
+}

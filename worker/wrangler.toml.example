@@ -15,6 +15,7 @@ ALLOWED_TRACKING_ORIGINS = "http://localhost:3000,http://localhost:4000,https://
 # UPSTASH_REDIS_REST_TOKEN
 # DEV_KIWIFY_SECRET           # só em dev
 # DEV_HOTMART_SECRET          # só em dev
+# DEV_PAYT_SECRET             # só em dev
 
 # Pra dev local, criar arquivo .dev.vars (gitignored) com:
 # SUPABASE_URL="http://localhost:54321"
@@ -24,3 +25,4 @@ ALLOWED_TRACKING_ORIGINS = "http://localhost:3000,http://localhost:4000,https://
 # UPSTASH_REDIS_REST_TOKEN=""
 # DEV_KIWIFY_SECRET="kiwify_test_secret_123"
 # DEV_HOTMART_SECRET="hotmart_test_hottok_456"
+# DEV_PAYT_SECRET="payt_test_integration_key_789"

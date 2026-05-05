@@ -1,0 +1,21 @@
+{
+  "integration_key": "a74cf3440b21998dc78c8f35c72f124e",
+  "transaction_id": "TX-EXP-001",
+  "cart_id": "CART-007",
+  "seller_id": "AR6D4X",
+  "test": false,
+  "status": "waiting_payment",
+  "type": "order",
+  "customer": { "fake_email": false, "email": "user@example.com" },
+  "product": { "code": "PROD-7", "quantity": 1, "price": 9700 },
+  "link": { "sources": [], "query_params": [] },
+  "transaction": {
+    "created_at": "2026-04-20 10:00:00",
+    "updated_at": "2026-05-05 18:00:00",
+    "payment_method": "boleto",
+    "payment_status": "expired",
+    "total_price": 9700
+  },
+  "started_at": "2026-04-20 09:55:00",
+  "updated_at": "2026-05-05 18:00:00"
+}

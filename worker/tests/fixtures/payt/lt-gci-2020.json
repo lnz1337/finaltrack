@@ -1,0 +1,31 @@
+{
+  "integration_key": "a74cf3440b21998dc78c8f35c72f124e",
+  "transaction_id": "TX-LTGCI-2020",
+  "cart_id": "CART-LTGCI-2020",
+  "seller_id": "AR6D4X",
+  "test": false,
+  "status": "paid",
+  "type": "order",
+  "customer": {
+    "fake_email": false,
+    "email": "user@example.com",
+    "origin": {
+      "name": "Campanha Google",
+      "code": "CAMP01",
+      "query_params": {
+        "lt_gci": "GCLID_FROM_2020_PATH"
+      }
+    }
+  },
+  "product": { "code": "PROD-9", "quantity": 1, "price": 9700 },
+  "link": { "sources": [], "query_params": [] },
+  "transaction": {
+    "created_at": "2026-05-05 22:00:00",
+    "payment_method": "credit_card",
+    "payment_status": "paid",
+    "total_price": 9700,
+    "paid_at": "2026-05-05 22:00:01"
+  },
+  "started_at": "2026-05-05 22:00:00",
+  "updated_at": "2026-05-05 22:00:01"
+}

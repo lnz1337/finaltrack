@@ -1,0 +1,22 @@
+{
+  "integration_key": "a74cf3440b21998dc78c8f35c72f124e",
+  "transaction_id": "TX-REFUND-001",
+  "cart_id": "CART-005",
+  "seller_id": "AR6D4X",
+  "test": false,
+  "status": "paid",
+  "type": "order",
+  "customer": { "fake_email": false, "email": "user@example.com" },
+  "product": { "code": "PROD-5", "quantity": 1, "price": 9700 },
+  "link": { "sources": [], "query_params": [] },
+  "transaction": {
+    "created_at": "2026-04-01 12:00:00",
+    "updated_at": "2026-05-05 16:00:00",
+    "payment_method": "credit_card",
+    "payment_status": "refunded",
+    "total_price": 9700,
+    "paid_at": "2026-04-01 12:01:00"
+  },
+  "started_at": "2026-04-01 11:55:00",
+  "updated_at": "2026-05-05 16:00:00"
+}
