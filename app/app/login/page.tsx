@@ -1,5 +1,4 @@
 'use client';
-
 import { useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { Button } from '@/components/ui/button';
@@ -16,18 +15,24 @@ export default function LoginPage() {
     e.preventDefault();
     setStatus('sending');
     setErrorMsg(null);
-    const supabase = createClient();
-    const { error } = await supabase.auth.signInWithOtp({
-      email,
-      options: {
-        emailRedirectTo: `${window.location.origin}/auth/callback?next=/dashboard`,
-      },
-    });
-    if (error) {
+    try {
+      const supabase = createClient();
+      const { error } = await supabase.auth.signInWithOtp({
+        email,
+        options: {
+          emailRedirectTo: window.location.origin + '/auth/callback?next=/dashboard',
+        },
+      });
+      if (error) {
+        setStatus('error');
+        setErrorMsg(error.message);
+      } else {
+        setStatus('sent');
+      }
+    } catch (err) {
       setStatus('error');
-      setErrorMsg(error.message);
-    } else {
-      setStatus('sent');
+      setErrorMsg(err instanceof Error ? err.message : 'Erro desconhecido');
+      console.error('Login error:', err);
     }
   }
 
@@ -39,7 +44,7 @@ export default function LoginPage() {
         </CardHeader>
         <CardContent>
           {status === 'sent' ? (
-            <p className="text-sm">Link mágico enviado pra <strong>{email}</strong>. Cheque sua caixa de entrada.</p>
+            <p className="text-sm">Link enviado pra <strong>{email}</strong>. Cheque a caixa de entrada.</p>
           ) : (
             <form onSubmit={onSubmit} className="space-y-4">
               <div className="space-y-2">
@@ -50,11 +55,11 @@ export default function LoginPage() {
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="voce@exemplo.com"
+                  placeholder="voce arroba exemplo.com"
                 />
               </div>
               <Button type="submit" className="w-full" disabled={status === 'sending'}>
-                {status === 'sending' ? 'Enviando...' : 'Enviar link mágico'}
+                {status === 'sending' ? 'Enviando...' : 'Enviar link'}
               </Button>
               {errorMsg && <p className="text-sm text-red-500">{errorMsg}</p>}
             </form>
