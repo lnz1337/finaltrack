@@ -8,7 +8,17 @@ interface KiwifyPayload {
   Customer?: { email?: string; mobile?: string; first_name?: string; last_name?: string };
   Product?: { product_id?: string };
   Commissions?: { charge_amount?: string | number; currency_type?: string };
-  TrackingParameters?: { xcod?: string; click_id?: string; gclid?: string; [k: string]: unknown };
+  TrackingParameters?: {
+    xcod?: string;
+    click_id?: string;
+    gclid?: string;
+    wbraid?: string;
+    gbraid?: string;
+    lt_gci?: string;
+    lt_wbr?: string;
+    lt_gbr?: string;
+    [k: string]: unknown;
+  };
 }
 
 const EVENT_TO_TYPE: Record<string, ConversionType> = {
@@ -31,7 +41,11 @@ export function parseKiwify(raw: unknown): ConversionDraft {
 
   const tp = p.TrackingParameters ?? {};
   const click_id_from_payload = (tp.xcod ?? tp.click_id) as string | undefined;
-  const gclid_from_payload = tp.gclid as string | undefined;
+  // iOS LTP aliases: lt_gci/lt_wbr/lt_gbr substituem gclid/wbraid/gbraid quando canônicos faltarem.
+  // Canonical sempre ganha (Google Ads tracking template emite ambos só em fallback).
+  const gclid_from_payload = (tp.gclid ?? tp.lt_gci) as string | undefined;
+  const wbraid_from_payload = (tp.wbraid ?? tp.lt_wbr) as string | undefined;
+  const gbraid_from_payload = (tp.gbraid ?? tp.lt_gbr) as string | undefined;
 
   const email = p.Customer?.email?.trim().toLowerCase();
 
@@ -46,6 +60,8 @@ export function parseKiwify(raw: unknown): ConversionDraft {
     customer_last_name: p.Customer?.last_name,
     click_id_from_payload,
     gclid_from_payload,
+    wbraid_from_payload,
+    gbraid_from_payload,
     occurred_at: p.created_at ?? new Date().toISOString(),
     offer_external_id: p.Product?.product_id,
     raw,

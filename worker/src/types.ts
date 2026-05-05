@@ -31,6 +31,8 @@ export interface ConversionDraft {
   customer_last_name?: string;
   click_id_from_payload?: string;
   gclid_from_payload?: string;
+  wbraid_from_payload?: string;
+  gbraid_from_payload?: string;
   occurred_at: string;
   raw: unknown;
   offer_external_id?: string;

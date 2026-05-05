@@ -47,8 +47,17 @@ export const LT_CLIENT_SOURCE = `
   if (!workspaceId || !workerOrigin) return;
 
   var qs = new URLSearchParams(location.search);
+  // Aliases iOS LTP: lt_gci/lt_wbr/lt_gbr são versões "unknown" dos canônicos pra escapar de
+  // strippers que removem nomes conhecidos (gclid/wbraid/gbraid) em forwarding/sharing.
+  // Resolvidos pra canônico antes do payload (canonical sempre ganha).
+  var aliasMap = { gclid: 'lt_gci', wbraid: 'lt_wbr', gbraid: 'lt_gbr' };
+  function getParam(canonical) {
+    return qs.get(canonical) || qs.get(aliasMap[canonical]) || null;
+  }
   var trackingFields = ['gclid','wbraid','gbraid','gclsrc','gad_source','gad_campaignid','utm_source','utm_medium','utm_campaign','utm_content','utm_term'];
-  var hasAnyTracking = trackingFields.some(function (f) { return qs.has(f); });
+  var hasAnyTracking = trackingFields.some(function (f) {
+    return qs.has(f) || (aliasMap[f] && qs.has(aliasMap[f]));
+  });
 
   // visitor cookie sempre
   var visitorId = getCookie('_lt_visitor');
@@ -73,7 +82,7 @@ export const LT_CLIENT_SOURCE = `
       referrer: document.referrer || null,
     };
     trackingFields.forEach(function (f) {
-      var v = qs.get(f);
+      var v = getParam(f);
       if (v) payload[f] = v;
     });
 

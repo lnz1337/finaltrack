@@ -10,7 +10,16 @@ interface HotmartPayload {
       approved_date?: number;
       status?: string;
       price?: { value?: number; currency_value?: string };
-      tracking?: { external_code?: string; source?: string; src?: string; sck?: string };
+      tracking?: {
+        external_code?: string;
+        source?: string;
+        src?: string;
+        sck?: string;
+        lt_gci?: string;
+        lt_wbr?: string;
+        lt_gbr?: string;
+        [k: string]: unknown;
+      };
     };
     buyer?: { email?: string; name?: string; checkout_phone?: string };
     product?: { id?: string | number; name?: string };
@@ -42,8 +51,13 @@ export function parseHotmart(raw: unknown): ConversionDraft {
   // Hotmart usa external_code como o "xcod" da gente
   const click_id_from_payload = tracking.external_code;
 
-  // Hotmart NÃO repassa gclid nativamente. Se quisermos, o lojista coloca em sck/src — manter undefined por ora.
-  const gclid_from_payload = undefined;
+  // Hotmart NÃO repassa gclid/wbraid/gbraid nativamente. Aliases iOS LTP
+  // (lt_gci/lt_wbr/lt_gbr) são a única fonte aceita em payload Hotmart —
+  // o lojista os propaga via tracking template do Google Ads. Se Fase 2/3
+  // mostrar necessidade de canônico, reabrir com decisão explícita.
+  const gclid_from_payload = tracking.lt_gci as string | undefined;
+  const wbraid_from_payload = tracking.lt_wbr as string | undefined;
+  const gbraid_from_payload = tracking.lt_gbr as string | undefined;
 
   const email = buyer?.email?.trim().toLowerCase();
 
@@ -58,6 +72,8 @@ export function parseHotmart(raw: unknown): ConversionDraft {
     customer_last_name: buyer?.name?.split(/\s+/).slice(1).join(' ') || undefined,
     click_id_from_payload,
     gclid_from_payload,
+    wbraid_from_payload,
+    gbraid_from_payload,
     occurred_at,
     offer_external_id: product?.id !== undefined ? String(product.id) : undefined,
     raw,

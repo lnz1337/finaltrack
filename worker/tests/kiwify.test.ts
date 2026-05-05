@@ -29,3 +29,54 @@ describe('parseKiwify', () => {
     expect(parseKiwify(approved).raw).toEqual(approved);
   });
 });
+
+describe('parseKiwify - aliases iOS LTP (lt_gci/lt_wbr/lt_gbr)', () => {
+  function payload(tracking: Record<string, unknown>) {
+    return {
+      ...approved,
+      TrackingParameters: tracking,
+    };
+  }
+
+  it('(a) só gclid → resolve em gclid_from_payload', () => {
+    const d = parseKiwify(payload({ gclid: 'CANON_G' }));
+    expect(d.gclid_from_payload).toBe('CANON_G');
+  });
+
+  it('(b) só lt_gci → resolve em gclid_from_payload', () => {
+    const d = parseKiwify(payload({ lt_gci: 'ALIAS_G' }));
+    expect(d.gclid_from_payload).toBe('ALIAS_G');
+  });
+
+  it('(c) gclid + lt_gci → canonical (gclid) ganha', () => {
+    const d = parseKiwify(payload({ gclid: 'CANON_G', lt_gci: 'ALIAS_G' }));
+    expect(d.gclid_from_payload).toBe('CANON_G');
+  });
+
+  it('(d) nenhum dos 4 aliases nem canonical → ConversionDraft sem gclid/wbraid/gbraid', () => {
+    const d = parseKiwify(payload({ utm_source: 'fb' }));
+    expect(d.gclid_from_payload).toBeUndefined();
+    expect(d.wbraid_from_payload).toBeUndefined();
+    expect(d.gbraid_from_payload).toBeUndefined();
+  });
+
+  it('(e) só lt_wbr → resolve em wbraid_from_payload', () => {
+    const d = parseKiwify(payload({ lt_wbr: 'ALIAS_W' }));
+    expect(d.wbraid_from_payload).toBe('ALIAS_W');
+  });
+
+  it('(f) só lt_gbr → resolve em gbraid_from_payload', () => {
+    const d = parseKiwify(payload({ lt_gbr: 'ALIAS_B' }));
+    expect(d.gbraid_from_payload).toBe('ALIAS_B');
+  });
+
+  it('canonical wbraid + lt_wbr → canonical ganha', () => {
+    const d = parseKiwify(payload({ wbraid: 'CANON_W', lt_wbr: 'ALIAS_W' }));
+    expect(d.wbraid_from_payload).toBe('CANON_W');
+  });
+
+  it('canonical gbraid + lt_gbr → canonical ganha', () => {
+    const d = parseKiwify(payload({ gbraid: 'CANON_B', lt_gbr: 'ALIAS_B' }));
+    expect(d.gbraid_from_payload).toBe('CANON_B');
+  });
+});
