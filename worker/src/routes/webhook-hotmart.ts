@@ -1,5 +1,6 @@
 import type { Env } from '../types';
 import { createSupabaseClient } from '../lib/supabase';
+import { timingSafeEqualHex } from '../lib/crypto';
 import { createDedup } from '../lib/dedup';
 import { resolveWebhookSecret } from '../lib/webhook-secret';
 import { matchConversion } from '../lib/matching';
@@ -13,7 +14,9 @@ export async function handleWebhookHotmart(req: Request, env: Env, endpointToken
   if (!resolved) return new Response('not found', { status: 404 });
 
   const hottok = req.headers.get('x-hotmart-hottok') ?? '';
-  if (hottok !== resolved.secret_plaintext) return new Response('invalid signature', { status: 401 });
+  if (!timingSafeEqualHex(hottok, resolved.secret_plaintext)) {
+    return new Response('invalid signature', { status: 401 });
+  }
 
   const rawBody = await req.text();
 

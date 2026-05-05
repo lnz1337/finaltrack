@@ -1,6 +1,7 @@
 import { SELF, env } from 'cloudflare:test';
-import { describe, it, expect, beforeEach, afterAll } from 'vitest';
+import { describe, it, expect, beforeEach, afterAll, vi } from 'vitest';
 import { createSupabaseClient } from '../src/lib/supabase';
+import * as cryptoLib from '../src/lib/crypto';
 import approved from './fixtures/hotmart-purchase-approved.json';
 
 const WS = '00000000-0000-0000-0000-000000000001';
@@ -73,5 +74,34 @@ describe('POST /webhook/hotmart/:token', () => {
     expect(r2.status).toBe(200);
     const rows = await sb.select<any>('conversions', { external_order_id: 'eq.TEST-H-002', select: 'id' });
     expect(rows.length).toBe(1);
+  });
+});
+
+describe('Hottok timing-safe comparison', () => {
+  it('(a) hottok correto → 200', async () => {
+    const res = await postWebhook(JSON.stringify(makePayload('TEST-H-ts-a')), env.DEV_HOTMART_SECRET!);
+    expect(res.status).toBe(200);
+  });
+
+  it('(b) hottok incorreto, mesmo length → 401', async () => {
+    const correct = env.DEV_HOTMART_SECRET!;
+    // Mesmo length, último char alterado pra diferir
+    const wrong = correct.slice(0, -1) + (correct.slice(-1) === 'a' ? 'b' : 'a');
+    expect(wrong.length).toBe(correct.length);
+    const res = await postWebhook(JSON.stringify(makePayload('TEST-H-ts-b')), wrong);
+    expect(res.status).toBe(401);
+  });
+
+  it('(c) hottok com length diferente → 401', async () => {
+    const wrong = env.DEV_HOTMART_SECRET! + 'extra';
+    const res = await postWebhook(JSON.stringify(makePayload('TEST-H-ts-c')), wrong);
+    expect(res.status).toBe(401);
+  });
+
+  it('(d) timingSafeEqualHex foi invocada (não usa === direto)', async () => {
+    const spy = vi.spyOn(cryptoLib, 'timingSafeEqualHex');
+    await postWebhook(JSON.stringify(makePayload('TEST-H-ts-d')), 'qualquer-coisa');
+    expect(spy).toHaveBeenCalled();
+    spy.mockRestore();
   });
 });

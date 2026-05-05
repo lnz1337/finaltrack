@@ -6,6 +6,7 @@ import {
   hashEmail,
   encryptAesGcm,
   decryptAesGcm,
+  timingSafeEqualHex,
 } from '../src/lib/crypto';
 
 describe('hmacSha256Hex', () => {
@@ -39,6 +40,26 @@ describe('sha256Hex / hashEmail', () => {
     const a = await hashEmail('  Foo@BAR.com ');
     const b = await hashEmail('foo@bar.com');
     expect(a).toBe(b);
+  });
+});
+
+describe('timingSafeEqualHex', () => {
+  it('strings idênticas → true', () => {
+    expect(timingSafeEqualHex('abc123', 'abc123')).toBe(true);
+  });
+
+  it('strings de mesmo length, conteúdo diferente → false', () => {
+    expect(timingSafeEqualHex('abc123', 'abc124')).toBe(false);
+    expect(timingSafeEqualHex('abc123', 'xbc123')).toBe(false); // diferença no início
+  });
+
+  it('strings de length diferente → false', () => {
+    expect(timingSafeEqualHex('abc', 'abcd')).toBe(false);
+    expect(timingSafeEqualHex('', 'a')).toBe(false);
+  });
+
+  it('strings vazias iguais → true', () => {
+    expect(timingSafeEqualHex('', '')).toBe(true);
   });
 });
 

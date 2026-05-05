@@ -32,7 +32,11 @@ export async function verifyHmacSha256(secret: string, message: string, signatur
   return timingSafeEqualHex(expected, signatureHex.toLowerCase());
 }
 
-function timingSafeEqualHex(a: string, b: string): boolean {
+// Comparação constant-time pra strings hex (e por extensão pra Hottok/HMAC plain).
+// Length-different retorna false imediatamente — info pública (não secreta).
+// Para length-equal, faz XOR bitwise em todos os chars e checa accumulator no fim,
+// nunca short-circuitando em mismatch — garante tempo independente do índice da diferença.
+export function timingSafeEqualHex(a: string, b: string): boolean {
   if (a.length !== b.length) return false;
   let mismatch = 0;
   for (let i = 0; i < a.length; i++) {
