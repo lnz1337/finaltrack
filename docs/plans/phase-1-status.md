@@ -161,12 +161,24 @@ Bugs encadeados resolvidos durante execução manual do E2E (Steps 10-12). Todos
 
 **Anti-pattern do chat (não é bug do código):** paste de código com `@` ou `.` em strings pode virar markdown link `[texto](url)` na renderização. Validar com `xxd` ou `wc -l + grep -n` quando suspeitar.
 
+### Bloco Payt integration — 2026-05-05
+
+- Payt mergeada na main como 3ª plataforma de webhook (commit `2f89a77`)
+- N=3 valida retroativamente skip do Passo D — webhook-base helpers reusados sem refactor
+- 156 testes (126 prior + 30 Payt: 20 parser + 10 route) + 18 fixtures
+- Smoke runtime 4 cenários aprovado via curl + psql
+- Schema preparado pra filtro `is_test=false` no dashboard (branch `feat/dashboard-test-filter`)
+- Auth estratégia nova: `integration_key` no body (timing-safe), parse JSON antes do auth check — diferente de Kiwify (HMAC body-first) e Hotmart (Hottok header-first)
+- Click ID com fallback chain de 4 níveis pra acomodar evolução do schema Payt: `lt_gci` 2025 → 2020 → `link.query_params` → `link.sources` → `utm_*`
+- IgnoredEventError dedicada pra eventos logística/subscription (return 200 sem insert)
+
 ### Tech debts conhecidos
 
 - **`tests/dedup.test.ts` e demais usando `cloudflare:test` runner mostram erros TS** de tuple length 0 e RequestInit conversion. Origem: módulo virtual `cloudflare:test` não exporta tipos no `@cloudflare/vitest-pool-workers` atual. Sem impacto em runtime — testes passam. Workaround temporário ou aguardar fix upstream.
 - **Insert de `conversions` não retorna UUID atualmente.** O wrapper `worker/src/lib/supabase.ts` hardcoda `Prefer: return=minimal`. Convenção do wrapper, não limitação do PostgREST (que suporta `return=representation`). Fase 3 vai precisar do id retornado pra criar `conversion_uploads` — investigar uso de `.select()` pós-insert ou expor opção `returnRepresentation` no wrapper quando essa fase começar.
 - **Smoke tests de `webhook-kiwify`/`webhook-hotmart` cobrem refund/chargeback paths sem inserir 'paid' prévio.** `checkAdjustmentWindow` exit-early (`originalConversion=null`) preserva green sem testar o warn path explicitamente. Ao refatorar `webhook-base.ts` (Seção 4 do handoff), considerar fixtures que incluem 'paid' anterior pra exercitar checagem de janela end-to-end.
 - **Migration 002 usa volatile DEFAULT em `ALTER ADD COLUMN`.** Em prod com volume, splittar em 3 statements (ALTER ADD nullable → UPDATE backfill → ALTER SET NOT NULL). Documentado no header do arquivo `supabase/migrations/20260503000002_webhook_endpoint_token.sql`.
+- **Flakiness transient no vitest pool de Cloudflare Workers.** Observado pós-commit `6da4c90` (Payt is_test propagation): primeira execução de `pnpm test` falhou em 1 teste não-identificado, re-run imediato veio limpo. Provável race no test pool de `@cloudflare/vitest-pool-workers`. Sintoma adjacente já documentado: erros TS de tuple length 0 no runner `cloudflare:test`. Provável mesma origem upstream. Não-bloqueante hoje (re-run resolve), mas vale watch upstream pra fix oficial.
 
 ---
 
