@@ -361,7 +361,15 @@ cp migrations/004_google_ads_metadata_sync.sql supabase/migrations/2026050700000
 ```bash
 supabase db reset
 ```
-Esperado: 4 migrations aplicadas em sequência (001, 002, 003, 004) sem erro SQL.
+Esperado: todas as migrations aplicadas em sequência sem erro SQL.
+
+- [ ] **Step 2.5: Re-seed dev workspace + auth user (OBRIGATÓRIO após reset)**
+
+```bash
+bash scripts/setup-dev.sh
+```
+
+`supabase db reset` apaga `workspaces` + `auth.users` (cleanup completo). Sem re-seed, integration tests da Phase 1 (Tasks 3-5) batem em `FK violation: workspace_id not present in workspaces`. Esse passo virou obrigatório após execução da Phase 1 onde o implementer da Task 3 perdeu ~30min reparando manualmente.
 
 - [ ] **Step 3: Smoke check — schema novo presente**
 
