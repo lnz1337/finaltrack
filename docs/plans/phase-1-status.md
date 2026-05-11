@@ -180,6 +180,16 @@ Bugs encadeados resolvidos durante execução manual do E2E (Steps 10-12). Todos
 - **Migration 002 usa volatile DEFAULT em `ALTER ADD COLUMN`.** Em prod com volume, splittar em 3 statements (ALTER ADD nullable → UPDATE backfill → ALTER SET NOT NULL). Documentado no header do arquivo `supabase/migrations/20260503000002_webhook_endpoint_token.sql`.
 - **Flakiness transient no vitest pool de Cloudflare Workers.** Observado pós-commit `6da4c90` (Payt is_test propagation): primeira execução de `pnpm test` falhou em 1 teste não-identificado, re-run imediato veio limpo. Provável race no test pool de `@cloudflare/vitest-pool-workers`. Sintoma adjacente já documentado: erros TS de tuple length 0 no runner `cloudflare:test`. Provável mesma origem upstream. Não-bloqueante hoje (re-run resolve), mas vale watch upstream pra fix oficial.
 
+#### Phase 2A — diferidos do Checkpoint 1 (2026-05-11)
+
+Findings do code-quality review da Phase 1 da Fase 2A que Leo aprovou como tech debt em vez de fix imediato. Bloqueantes resolvidos via patches P1-P4 (commits `84cf001`, `180916f`, `fa5f2cd`, `513de13`).
+
+- **D1. Comment "cost_sync_log pre-condition: 0 rows" em migration 004.** A constraint `status CHECK (status IN ('running','success','partial','failed'))` falharia em ALTER se existissem rows com status fora do set. Hoje tabela vazia = OK. Comment de 1 linha; adicionar se mexer no arquivo por outro motivo.
+- **D2. Cobertura adicional `ad_groups_marked` + `ads_marked` da RPC `mark_removed_for_account`.** Cenários da Task 3 (mark-removed.test.ts) só assertam `campaigns_marked`. Cascade ad_groups/ads não tem cobertura integration direta — confiamos no smoke Phase 8 contra volume real. Considerar fixtures dedicados quando Tasks 6+ trouxerem dados de ad_groups e ads.
+- **D3. Remover `SbExtended` interface redundante em `mark-removed.test.ts`.** Foi adicionada antes de `rpc()` entrar no `SupabaseClient` real. Hoje o `ReturnType<typeof createSupabaseClient>` já cobre `rpc`. Cleanup cosmético.
+- **D4. Comment "uses JS clock; OK for local + prod (drift < 1s irrelevant for 10min TTL)" em `oauth-pending.test.ts`.** Test #3 usa `new Date().toISOString()` do JS pra cleanup DELETE filter — assume sync com clock do Postgres. Local Supabase = mesma máquina, sem drift. Comment de 1 linha.
+- **D5. Assertion bidirecional em `oauth-pending.test.ts` Test #2 expires_at.** `Math.abs(expires_at - target) < 5000` aceita drift nos dois lados (ex.: 4s antes do esperado seria sinal de bug e o teste aprovaria). Trocar por `expect(expires_at).toBeGreaterThanOrEqual(target); expect(expires_at - target).toBeLessThan(5000);`. Cosmético.
+
 ---
 
 ## Como recuperar artefatos da conversa de planejamento
