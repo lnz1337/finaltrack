@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach, afterAll } from 'vitest';
 import { env } from 'cloudflare:test';
 import { syncAccount } from '../../src/lib/google-ads/sync';
 import * as client from '../../src/lib/google-ads/client';
@@ -35,6 +35,12 @@ describe('syncAccount orchestrator', () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+  });
+
+  // Cleanup pós-suite (último teste não tem beforeEach seguinte). Cascade limpa sync_log/campaigns.
+  afterAll(async () => {
+    const sbCleanup = createSupabaseClient(env);
+    await sbCleanup.delete('google_ads_accounts', { id: `eq.${ACCOUNT_ID}` });
   });
 
   it('happy path: sync completo cria sync_log status=success', async () => {

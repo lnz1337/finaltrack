@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterAll } from 'vitest';
 import { env } from 'cloudflare:test';
 import { createSupabaseClient } from '../../src/lib/supabase';
 
@@ -18,6 +18,14 @@ describe('google_ads_sync_log', () => {
       refresh_token_encrypted: 'x',
       refresh_token_iv: 'y',
     });
+  });
+
+  // Cleanup pós-suite: o último teste não tem beforeEach seguinte que limpe.
+  // Sem isso, rows em google_ads_sync_log (via cascade do account) sobram e
+  // poluem /api/google-ads/sync-status em dev local. Mesmo padrão de tc_cors/match_d (phase-1-status §gotchas).
+  afterAll(async () => {
+    const sbCleanup = createSupabaseClient(env);
+    await sbCleanup.delete('google_ads_accounts', { id: `eq.${ACCOUNT_ID}` });
   });
 
   it('aceita sync_type=metadata + trace_id + parsed_skipped', async () => {

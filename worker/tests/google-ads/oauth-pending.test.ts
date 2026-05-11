@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterAll } from 'vitest';
 import { env } from 'cloudflare:test';
 import { createSupabaseClient } from '../../src/lib/supabase';
 import { encryptAesGcm, decryptAesGcm } from '../../src/lib/crypto';
@@ -12,6 +12,12 @@ describe('oauth_pending_selections CRUD', () => {
   beforeEach(async () => {
     sb = createSupabaseClient(env);
     await sb.delete('oauth_pending_selections', { workspace_id: `eq.${WORKSPACE_ID}` });
+  });
+
+  // Cleanup pós-suite (último teste não tem beforeEach seguinte).
+  afterAll(async () => {
+    const sbCleanup = createSupabaseClient(env);
+    await sbCleanup.delete('oauth_pending_selections', { workspace_id: `eq.${WORKSPACE_ID}` });
   });
 
   it('insere e seleciona pending session com encrypted_payload + payload_iv', async () => {

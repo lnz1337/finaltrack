@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterAll } from 'vitest';
 import { env } from 'cloudflare:test';
 import { createSupabaseClient } from '../../src/lib/supabase';
 
@@ -38,6 +38,12 @@ describe('mark_removed_for_account RPC', () => {
   beforeEach(async () => {
     sb = createSupabaseClient(env) as typeof sb;
     await resetFixtures(sb);
+  });
+
+  // Cleanup pós-suite (último teste não tem beforeEach seguinte). Cascade limpa campaigns/ad_groups/ads.
+  afterAll(async () => {
+    const sbCleanup = createSupabaseClient(env);
+    await sbCleanup.delete('google_ads_accounts', { id: `eq.${ACCOUNT_ID}` });
   });
 
   it('cenário a: zero mudanças retorna (0, 0, 0)', async () => {
