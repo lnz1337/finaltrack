@@ -2908,6 +2908,7 @@ import { encryptAesGcm } from '../../src/lib/crypto';
 const WORKSPACE_ID = '00000000-0000-0000-0000-000000000001';
 const ACCOUNT_ID = '00000000-0000-0000-0000-00000000a100';
 const KEY_HEX = '00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff';
+const CUSTOMER_ID = '2222222222'; // NÃO usar '1234567890' aqui — Task 3 já usa, viola UNIQUE(workspace_id, customer_id).
 
 async function setupAccount(sb: ReturnType<typeof createSupabaseClient>) {
   await sb.delete('google_ads_accounts', { id: `eq.${ACCOUNT_ID}` });
@@ -2915,7 +2916,7 @@ async function setupAccount(sb: ReturnType<typeof createSupabaseClient>) {
   await sb.insert('google_ads_accounts', {
     id: ACCOUNT_ID,
     workspace_id: WORKSPACE_ID,
-    customer_id: '1234567890',
+    customer_id: CUSTOMER_ID,
     refresh_token_encrypted: ciphertext,
     refresh_token_iv: iv,
     is_active: true,
@@ -2944,7 +2945,7 @@ describe('syncAccount orchestrator', () => {
       .mockResolvedValueOnce([]) // ad_groups for C1
       .mockResolvedValueOnce([]); // asset_groups for C1
 
-    const result = await syncAccount(env, { id: ACCOUNT_ID, workspace_id: WORKSPACE_ID, customer_id: '1234567890', manager_customer_id: null, refresh_token_encrypted: '', refresh_token_iv: '', is_active: true });
+    const result = await syncAccount(env, sb, ACCOUNT_ID, 'manual');
     expect(result.status).toBe('success');
 
     const logs = await sb.select<{ status: string; sync_type: string }>('google_ads_sync_log', {
@@ -2968,7 +2969,7 @@ describe('syncAccount orchestrator', () => {
     vi.spyOn(client, 'refreshAccessToken').mockResolvedValue({ access_token: 'AT', expires_in: 3600 });
     vi.spyOn(client, 'googleAdsSearch').mockResolvedValue([]);
 
-    await syncAccount(env, { id: ACCOUNT_ID, workspace_id: WORKSPACE_ID, customer_id: '1234567890', manager_customer_id: null, refresh_token_encrypted: '', refresh_token_iv: '', is_active: true });
+    await syncAccount(env, sb, ACCOUNT_ID, 'manual');
 
     const zombieRows = await sb.select<{ status: string; error_message: string | null }>('google_ads_sync_log', {
       google_ads_account_id: `eq.${ACCOUNT_ID}`,
@@ -2989,20 +2990,14 @@ describe('syncAccount orchestrator', () => {
       date_range_end: '2026-05-07',
     });
 
-    await expect(syncAccount(env, {
-      id: ACCOUNT_ID, workspace_id: WORKSPACE_ID, customer_id: '1234567890',
-      manager_customer_id: null, refresh_token_encrypted: '', refresh_token_iv: '', is_active: true,
-    })).rejects.toThrow(/sync_in_progress/);
+    await expect(syncAccount(env, sb, ACCOUNT_ID, 'manual')).rejects.toThrow(/sync_in_progress/);
   });
 
   it('invalid_grant marca account is_active=false', async () => {
     const { InvalidGrantError } = await import('../../src/lib/google-ads/errors');
     vi.spyOn(client, 'refreshAccessToken').mockRejectedValue(new InvalidGrantError());
 
-    await expect(syncAccount(env, {
-      id: ACCOUNT_ID, workspace_id: WORKSPACE_ID, customer_id: '1234567890',
-      manager_customer_id: null, refresh_token_encrypted: '', refresh_token_iv: '', is_active: true,
-    })).rejects.toBeInstanceOf(InvalidGrantError);
+    await expect(syncAccount(env, sb, ACCOUNT_ID, 'manual')).rejects.toBeInstanceOf(InvalidGrantError);
 
     const acc = await sb.select<{ is_active: boolean }>('google_ads_accounts', {
       id: `eq.${ACCOUNT_ID}`, select: 'is_active',
@@ -3025,10 +3020,7 @@ describe('syncAccount orchestrator', () => {
     vi.spyOn(client, 'refreshAccessToken').mockResolvedValue({ access_token: 'AT', expires_in: 3600 });
     vi.spyOn(client, 'googleAdsSearch').mockResolvedValue([]); // sync vazio
 
-    await syncAccount(env, {
-      id: ACCOUNT_ID, workspace_id: WORKSPACE_ID, customer_id: '1234567890',
-      manager_customer_id: null, refresh_token_encrypted: '', refresh_token_iv: '', is_active: true,
-    });
+    await syncAccount(env, sb, ACCOUNT_ID, 'manual');
 
     const c = await sb.select<{ status: string }>('campaigns', {
       google_ads_account_id: `eq.${ACCOUNT_ID}`,
@@ -3093,14 +3085,27 @@ export interface SyncResult {
   duration_ms: number;
 }
 
-export async function syncAccount(env: Env, account: GoogleAdsAccountRow): Promise<SyncResult> {
-  const sb = createSupabaseClient(env);
+export async function syncAccount(
+  env: Env,
+  sb: ReturnType<typeof createSupabaseClient>,
+  accountId: string,
+  triggeredBy: 'manual' | 'cron'
+): Promise<SyncResult> {
+  // Fetch full account row (callers passam só accountId, função busca o resto).
+  const accounts = await sb.select<GoogleAdsAccountRow>('google_ads_accounts', {
+    id: `eq.${accountId}`,
+    select: 'id,workspace_id,customer_id,manager_customer_id,refresh_token_encrypted,refresh_token_iv,is_active',
+    limit: '1',
+  });
+  if (!accounts[0]) throw new Error(`account_not_found: ${accountId}`);
+  const account = accounts[0];
+
   const traceId = crypto.randomUUID();
   const startedAt = Date.now();
   const startedAtIso = new Date(startedAt).toISOString();
   const log = createStructuredLogger(traceId, startedAt);
 
-  log.info('sync_start', { account_id: account.id, customer_id: account.customer_id });
+  log.info('sync_start', { account_id: account.id, customer_id: account.customer_id, triggered_by: triggeredBy });
 
   // Passo 0: zombie cleanup
   const zombieThresholdIso = new Date(startedAt - ZOMBIE_THRESHOLD_MIN * 60_000).toISOString();
@@ -3128,7 +3133,7 @@ export async function syncAccount(env: Env, account: GoogleAdsAccountRow): Promi
     sync_type: 'metadata',
     status: 'running',
     trace_id: traceId,
-    triggered_by: 'on_demand',
+    triggered_by: triggeredBy,
   });
 
   function checkBudget(reason: string) {
@@ -3142,7 +3147,7 @@ export async function syncAccount(env: Env, account: GoogleAdsAccountRow): Promi
   let partialSkipped: Record<string, unknown> | null = null;
 
   try {
-    // Passo 3: decrypt + refresh
+    // Passo 3: decrypt refresh_token (já temos os campos no account fetched no top) + refresh
     const refreshToken = await decryptAesGcm(env.ENCRYPTION_KEY, account.refresh_token_encrypted, account.refresh_token_iv);
     const tokens = await refreshAccessToken({
       refreshToken,
@@ -3169,15 +3174,17 @@ export async function syncAccount(env: Env, account: GoogleAdsAccountRow): Promi
     phaseCompleted = 'ad_groups';
 
     checkBudget('before_ads');
-    const adGroups = await sb.select<{ id: string; google_ad_group_id: string; entity_type: string }>(
+    const adGroups = await sb.select<{ id: string; google_ad_group_id: string; entity_type: string; campaign_id: string }>(
       'ad_groups',
       {
-        select: 'id,google_ad_group_id,entity_type',
-        // join: só ad_groups cujo campaign pertence a este account.
-        // Postgrest filter via composite seria ideal; por hora, filtra in-memory.
+        select: 'id,google_ad_group_id,entity_type,campaign_id',
       }
     );
-    const adsTotal = await syncAds(env, sb, account, tokens.access_token, adGroups, log, startedAtIso, checkBudget);
+    // Filter in-memory por account (decisão original §3.B; Postgrest composite defer pra refactor).
+    // Sem isso, multi-account leak: sync de account A puxa ad_groups de account B.
+    const campaignIds = new Set(campaigns.map((c) => c.id));
+    const adGroupsForAccount = adGroups.filter((ag) => campaignIds.has(ag.campaign_id));
+    const adsTotal = await syncAds(env, sb, account, tokens.access_token, adGroupsForAccount, log, startedAtIso, checkBudget);
     rowsSynced += adsTotal.ok;
     parsedSkipped += adsTotal.skipped;
     phaseCompleted = 'ads';

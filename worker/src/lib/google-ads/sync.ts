@@ -46,14 +46,27 @@ export interface SyncResult {
   duration_ms: number;
 }
 
-export async function syncAccount(env: Env, account: GoogleAdsAccountRow): Promise<SyncResult> {
-  const sb = createSupabaseClient(env);
+export async function syncAccount(
+  env: Env,
+  sb: ReturnType<typeof createSupabaseClient>,
+  accountId: string,
+  triggeredBy: 'manual' | 'cron'
+): Promise<SyncResult> {
+  // Fetch full account row (callers passam só accountId, função busca o resto).
+  const accounts = await sb.select<GoogleAdsAccountRow>('google_ads_accounts', {
+    id: `eq.${accountId}`,
+    select: 'id,workspace_id,customer_id,manager_customer_id,refresh_token_encrypted,refresh_token_iv,is_active',
+    limit: '1',
+  });
+  if (!accounts[0]) throw new Error(`account_not_found: ${accountId}`);
+  const account = accounts[0];
+
   const traceId = crypto.randomUUID();
   const startedAt = Date.now();
   const startedAtIso = new Date(startedAt).toISOString();
   const log = createStructuredLogger(traceId, startedAt);
 
-  log.info('sync_start', { account_id: account.id, customer_id: account.customer_id });
+  log.info('sync_start', { account_id: account.id, customer_id: account.customer_id, triggered_by: triggeredBy });
 
   // Passo 0: zombie cleanup
   const zombieThresholdIso = new Date(startedAt - ZOMBIE_THRESHOLD_MIN * 60_000).toISOString();
@@ -81,7 +94,7 @@ export async function syncAccount(env: Env, account: GoogleAdsAccountRow): Promi
     sync_type: 'metadata',
     status: 'running',
     trace_id: traceId,
-    triggered_by: 'on_demand',
+    triggered_by: triggeredBy,
   });
 
   function checkBudget(reason: string) {
@@ -95,14 +108,7 @@ export async function syncAccount(env: Env, account: GoogleAdsAccountRow): Promi
   let partialSkipped: Record<string, unknown> | null = null;
 
   try {
-    // Re-fetch encrypted token from DB to ensure we use the persisted value
-    // (callers may pass empty strings for convenience in tests and cron dispatchers)
-    const freshAccount = await sb.select<{ refresh_token_encrypted: string; refresh_token_iv: string }>(
-      'google_ads_accounts',
-      { id: `eq.${account.id}`, select: 'refresh_token_encrypted,refresh_token_iv', limit: '1' }
-    );
-    if (!freshAccount[0]) throw new Error(`account_not_found: ${account.id}`);
-    const refreshToken = await decryptAesGcm(env.ENCRYPTION_KEY, freshAccount[0].refresh_token_encrypted, freshAccount[0].refresh_token_iv);
+    const refreshToken = await decryptAesGcm(env.ENCRYPTION_KEY, account.refresh_token_encrypted, account.refresh_token_iv);
     const tokens = await refreshAccessToken({
       refreshToken,
       clientId: env.GOOGLE_ADS_CLIENT_ID,

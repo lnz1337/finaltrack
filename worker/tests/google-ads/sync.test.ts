@@ -44,7 +44,7 @@ describe('syncAccount orchestrator', () => {
       .mockResolvedValueOnce([])
       .mockResolvedValueOnce([]);
 
-    const result = await syncAccount(env, { id: ACCOUNT_ID, workspace_id: WORKSPACE_ID, customer_id: CUSTOMER_ID, manager_customer_id: null, refresh_token_encrypted: '', refresh_token_iv: '', is_active: true });
+    const result = await syncAccount(env, sb, ACCOUNT_ID, 'manual');
     expect(result.status).toBe('success');
 
     const logs = await sb.select<{ status: string; sync_type: string }>('google_ads_sync_log', {
@@ -68,7 +68,7 @@ describe('syncAccount orchestrator', () => {
     vi.spyOn(client, 'refreshAccessToken').mockResolvedValue({ access_token: 'AT', expires_in: 3600 });
     vi.spyOn(client, 'googleAdsSearch').mockResolvedValue([]);
 
-    await syncAccount(env, { id: ACCOUNT_ID, workspace_id: WORKSPACE_ID, customer_id: CUSTOMER_ID, manager_customer_id: null, refresh_token_encrypted: '', refresh_token_iv: '', is_active: true });
+    await syncAccount(env, sb, ACCOUNT_ID, 'manual');
 
     const zombieRows = await sb.select<{ status: string; error_message: string | null }>('google_ads_sync_log', {
       google_ads_account_id: `eq.${ACCOUNT_ID}`,
@@ -89,20 +89,14 @@ describe('syncAccount orchestrator', () => {
       date_range_end: '2026-05-07',
     });
 
-    await expect(syncAccount(env, {
-      id: ACCOUNT_ID, workspace_id: WORKSPACE_ID, customer_id: CUSTOMER_ID,
-      manager_customer_id: null, refresh_token_encrypted: '', refresh_token_iv: '', is_active: true,
-    })).rejects.toThrow(/sync_in_progress/);
+    await expect(syncAccount(env, sb, ACCOUNT_ID, 'manual')).rejects.toThrow(/sync_in_progress/);
   });
 
   it('invalid_grant marca account is_active=false', async () => {
     const { InvalidGrantError } = await import('../../src/lib/google-ads/errors');
     vi.spyOn(client, 'refreshAccessToken').mockRejectedValue(new InvalidGrantError());
 
-    await expect(syncAccount(env, {
-      id: ACCOUNT_ID, workspace_id: WORKSPACE_ID, customer_id: CUSTOMER_ID,
-      manager_customer_id: null, refresh_token_encrypted: '', refresh_token_iv: '', is_active: true,
-    })).rejects.toBeInstanceOf(InvalidGrantError);
+    await expect(syncAccount(env, sb, ACCOUNT_ID, 'manual')).rejects.toBeInstanceOf(InvalidGrantError);
 
     const acc = await sb.select<{ is_active: boolean }>('google_ads_accounts', {
       id: `eq.${ACCOUNT_ID}`, select: 'is_active',
@@ -124,10 +118,7 @@ describe('syncAccount orchestrator', () => {
     vi.spyOn(client, 'refreshAccessToken').mockResolvedValue({ access_token: 'AT', expires_in: 3600 });
     vi.spyOn(client, 'googleAdsSearch').mockResolvedValue([]);
 
-    await syncAccount(env, {
-      id: ACCOUNT_ID, workspace_id: WORKSPACE_ID, customer_id: CUSTOMER_ID,
-      manager_customer_id: null, refresh_token_encrypted: '', refresh_token_iv: '', is_active: true,
-    });
+    await syncAccount(env, sb, ACCOUNT_ID, 'manual');
 
     const c = await sb.select<{ status: string }>('campaigns', {
       google_ads_account_id: `eq.${ACCOUNT_ID}`,
