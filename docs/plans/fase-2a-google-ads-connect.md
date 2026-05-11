@@ -479,7 +479,7 @@ describe('mark_removed_for_account RPC', () => {
   });
 
   it('cenário b: campaigns com last_synced_at antigo são marcadas REMOVED', async () => {
-    const oldSync = new Date(Date.now() - 10000).toISOString();
+    const oldSync = new Date(Date.now() - 60 * 60 * 1000).toISOString(); // 1h margin
     await insertCampaign(sb, '00000000-0000-0000-0000-00000000c001', oldSync);
     await insertCampaign(sb, '00000000-0000-0000-0000-00000000c002', oldSync);
 
@@ -498,7 +498,7 @@ describe('mark_removed_for_account RPC', () => {
   });
 
   it('cenário c: campaigns já em REMOVED não são re-tocadas (idempotência)', async () => {
-    const oldSync = new Date(Date.now() - 10000).toISOString();
+    const oldSync = new Date(Date.now() - 60 * 60 * 1000).toISOString(); // 1h margin
     await insertCampaign(sb, '00000000-0000-0000-0000-00000000c003', oldSync, 'REMOVED');
 
     const startedAt = new Date(Date.now() - 1000).toISOString();
