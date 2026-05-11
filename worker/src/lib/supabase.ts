@@ -8,6 +8,7 @@ export interface SupabaseClient {
   select<T = unknown>(table: string, query: Record<string, string>): Promise<T[]>;
   insert<T = unknown>(table: string, row: T | T[], opts?: InsertOptions): Promise<void>;
   delete(table: string, query: Record<string, string>): Promise<void>;
+  rpc<T = unknown>(name: string, params: Record<string, unknown>): Promise<T>;
 }
 
 export function createSupabaseClient(env: Env): SupabaseClient {
@@ -57,6 +58,17 @@ export function createSupabaseClient(env: Env): SupabaseClient {
       if (!res.ok && res.status !== 204) {
         throw new Error(`Supabase delete falhou ${res.status}: ${await res.text()}`);
       }
+    },
+
+    async rpc<T = unknown>(name: string, params: Record<string, unknown>): Promise<T> {
+      const url = `${baseUrl}/rest/v1/rpc/${name}`;
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: headers(),
+        body: JSON.stringify(params),
+      });
+      if (!res.ok) throw new Error(`Supabase rpc ${name} falhou ${res.status}: ${await res.text()}`);
+      return (await res.json()) as T;
     },
   };
 }
