@@ -190,6 +190,13 @@ Findings do code-quality review da Phase 1 da Fase 2A que Leo aprovou como tech 
 - **D4. Comment "uses JS clock; OK for local + prod (drift < 1s irrelevant for 10min TTL)" em `oauth-pending.test.ts`.** Test #3 usa `new Date().toISOString()` do JS pra cleanup DELETE filter — assume sync com clock do Postgres. Local Supabase = mesma máquina, sem drift. Comment de 1 linha.
 - **D5. Assertion bidirecional em `oauth-pending.test.ts` Test #2 expires_at.** `Math.abs(expires_at - target) < 5000` aceita drift nos dois lados (ex.: 4s antes do esperado seria sinal de bug e o teste aprovaria). Trocar por `expect(expires_at).toBeGreaterThanOrEqual(target); expect(expires_at - target).toBeLessThan(5000);`. Cosmético.
 
+#### Phase 2A — diferidos do Checkpoint 2 (2026-05-11)
+
+Findings do review da Phase 2-4 (Libs Worker + Google Ads namespace + sync orchestrator) que Leo aprovou como tech debt em vez de fix imediato. Bloqueantes resolvidos via patches P5-P8 (commits `be8ef1e`, `1a22adc`, `c088a2a`).
+
+- **D6. `partialSkipped` variable lifecycle em `sync.ts`.** Declarada como `let partialSkipped: Record<string, unknown> | null = null` no top do try-block mas só atribuída dentro do catch (branch `TimeBudgetError`). Outside catch fica `null`. Pattern let-then-catch-assign é válido, não cria bug, mas cheira a leftover de design anterior. Polish se mexer no orchestrator por outro motivo.
+- **D7. Cobertura de branches do orchestrator (`syncAccount`).** Os 5 testes da Task 22 cobrem: happy path, zombie cleanup, 409 in-progress, invalid_grant cascade, REMOVED detection. NÃO cobertos por test dedicado: (a) `TimeBudgetError` mid-phase abort com partial_skipped JSONB completo, (b) `RateLimitError` + retry-after propagation, (c) `NetworkError` num syncCampaigns vs syncAds (caminhos diferentes de cleanup), (d) `upsertWithBisect` real bisect chain durante sync (Task 13 testa em isolation; orchestrator não). Smoke Phase 7-8 vai exercitar na prática contra Google Ads test customer. Adiciona tests dedicados pós-merge SE aparecerem bugs em smoke.
+
 ---
 
 ## Como recuperar artefatos da conversa de planejamento
