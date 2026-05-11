@@ -15,6 +15,8 @@ export default async function DashboardLayout({ children }: { children: React.Re
           <nav className="text-sm flex gap-4">
             <Link href="/dashboard">Resumo</Link>
             <Link href="/dashboard/conversions">Conversões</Link>
+            <Link href="/dashboard/campaigns">Campanhas</Link>
+            <Link href="/dashboard/integrations">Integrações</Link>
           </nav>
         </div>
         <span className="text-xs text-muted-foreground">{user.email}</span>
