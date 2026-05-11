@@ -111,6 +111,7 @@ Detalhadas em `docs/handoffs/2026-05-07-fase-2a-brainstorm.md` §"Decisões cons
 | 3.A.2.2 | Cleanup de pending expirados: `DELETE … WHERE expires_at < NOW()` no mesmo cron diário (sem job dedicado) |
 | 3.A.2.3 | UI de seleção minimal: checkboxes (multi-select), customer_id raw formatado (ver §8.5), countdown live; sem buscar nome amigável (1 API call por customer = quota) |
 | 3.A.2.4 | **Pattern App→Worker** (reusável pra 2B/2C): headers `Authorization: Bearer ${WORKER_INTERNAL_TOKEN}` + `X-User-JWT: ${supabase_jwt}`. Worker valida ambos via `lib/internal-auth.ts → validateInternalRequest()` que retorna `{workspaceId, userId}` ou Response 401/404 |
+| 3.A.2.5 | `account_name` default no upsert (callback single + `/finalize` multi): se a Google API retornar nome amigável (raro neste fluxo), usa-o; senão `account_name = 'Conta ' || formatCustomerId(customer_id)` (ex.: `Conta 111-111-1111`). Zero overhead, sempre útil pra UI. Substitui fallback genérico `'Conta Google Ads'`. Aplica em `oauth-google-ads.ts` Task 32 (callback) e Task 34 (finalize) |
 | 3.A.3 | `manager_customer_id` NULL na 2A; comment inline documenta que valor preenchido vira header `login-customer-id` quando cliente terceiro for conectado |
 | 3.B.4 | Concorrência cron+manual: passo 0 do `syncAccount` faz UPDATE zombie cleanup (`WHERE started_at < NOW() - INTERVAL '5 minutes' AND status='running'`). Passo seguinte: 409 se há run `'running'` < 5min |
 | 3.B.5.1 | Sem backfill de `google_campaign_id` em `clicks` pré-sync. Tech debt explícito da 2B |
