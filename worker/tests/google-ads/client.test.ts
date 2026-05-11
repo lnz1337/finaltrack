@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { refreshAccessToken, googleAdsSearch } from '../../src/lib/google-ads/client';
+import { refreshAccessToken, googleAdsSearch, listAccessibleCustomers } from '../../src/lib/google-ads/client';
 import { InvalidGrantError, InvalidClientError, GoogleAdsApiError, RateLimitError, NetworkError } from '../../src/lib/google-ads/errors';
 
 describe('refreshAccessToken', () => {
@@ -112,5 +112,37 @@ describe('googleAdsSearch', () => {
     const init = callArgs[1] as RequestInit;
     const headers = init.headers as Record<string, string>;
     expect(headers['login-customer-id']).toBe('9999999999');
+  });
+});
+
+describe('listAccessibleCustomers', () => {
+  let fetchSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    fetchSpy = vi.spyOn(globalThis, 'fetch');
+  });
+
+  afterEach(() => {
+    fetchSpy.mockRestore();
+  });
+
+  it('retorna array de customer_ids extraídos de resourceNames', async () => {
+    fetchSpy.mockResolvedValueOnce(new Response(JSON.stringify({
+      resourceNames: ['customers/1234567890', 'customers/9876543210'],
+    }), { status: 200, headers: { 'content-type': 'application/json' } }));
+    const ids = await listAccessibleCustomers({ accessToken: 'AT', developerToken: 'DT' });
+    expect(ids).toEqual(['1234567890', '9876543210']);
+  });
+
+  it('retorna [] em response sem resourceNames', async () => {
+    fetchSpy.mockResolvedValueOnce(new Response(JSON.stringify({}), {
+      status: 200, headers: { 'content-type': 'application/json' },
+    }));
+    expect(await listAccessibleCustomers({ accessToken: 'AT', developerToken: 'DT' })).toEqual([]);
+  });
+
+  it('throw em 4xx', async () => {
+    fetchSpy.mockResolvedValueOnce(new Response('forbidden', { status: 403 }));
+    await expect(listAccessibleCustomers({ accessToken: 'AT', developerToken: 'DT' })).rejects.toThrow();
   });
 });

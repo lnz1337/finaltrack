@@ -98,3 +98,25 @@ export async function googleAdsSearch<T = unknown>(params: GoogleAdsSearchParams
 
   return allResults;
 }
+
+export interface ListAccessibleParams {
+  accessToken: string;
+  developerToken: string;
+}
+
+export async function listAccessibleCustomers(p: ListAccessibleParams): Promise<string[]> {
+  const url = `https://googleads.googleapis.com/${API_VERSION}/customers:listAccessibleCustomers`;
+  const res = await fetch(url, {
+    method: 'GET',
+    headers: {
+      Authorization: `Bearer ${p.accessToken}`,
+      'developer-token': p.developerToken,
+    },
+  });
+  if (!res.ok) {
+    throw new Error(`listAccessibleCustomers ${res.status}: ${await res.text()}`);
+  }
+  const json = (await res.json()) as { resourceNames?: string[] };
+  if (!Array.isArray(json.resourceNames)) return [];
+  return json.resourceNames.map((rn) => rn.replace(/^customers\//, ''));
+}
