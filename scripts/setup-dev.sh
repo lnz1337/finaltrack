@@ -170,6 +170,17 @@ VALUES
   )
 ON CONFLICT (workspace_id, platform) DO NOTHING;
 
+-- 3 google_ads_accounts dev (Fase 2A) — UI populada de cara em dev.
+-- UUIDs no range ...d1/d2/d3 (DISTINTOS dos UUIDs de teste — testes usam crypto.randomUUID()).
+-- account_name segue decisão 3.A.2.5: 'Conta ' || formatCustomerId(customer_id).
+-- refresh_token_encrypted/iv são placeholders — sync real NÃO funciona nestas (são pra testar a UI de listagem).
+INSERT INTO google_ads_accounts (id, workspace_id, customer_id, account_name, refresh_token_encrypted, refresh_token_iv, is_active)
+VALUES
+  ('00000000-0000-0000-0000-0000000000d1', '00000000-0000-0000-0000-000000000001', '1112223333', 'Conta 111-222-3333', 'DEV_PLACEHOLDER_ENCRYPTED', 'DEV_PLACEHOLDER_IV', true),
+  ('00000000-0000-0000-0000-0000000000d2', '00000000-0000-0000-0000-000000000001', '4445556666', 'Conta 444-555-6666', 'DEV_PLACEHOLDER_ENCRYPTED', 'DEV_PLACEHOLDER_IV', true),
+  ('00000000-0000-0000-0000-0000000000d3', '00000000-0000-0000-0000-000000000001', '7778889999', 'Conta 777-888-9999', 'DEV_PLACEHOLDER_ENCRYPTED', 'DEV_PLACEHOLDER_IV', true)
+ON CONFLICT (id) DO NOTHING;
+
 COMMIT;
 SQL
 
@@ -190,6 +201,9 @@ OFFER_COUNT=$(docker exec "${DB_CONTAINER}" psql -U "${DB_USER}" -d "${DB_NAME}"
 WH_COUNT=$(docker exec "${DB_CONTAINER}" psql -U "${DB_USER}" -d "${DB_NAME}" -t -c \
   "SELECT COUNT(*) FROM webhook_secrets WHERE workspace_id = '00000000-0000-0000-0000-000000000001';" | tr -d ' ')
 
+GADS_COUNT=$(docker exec "${DB_CONTAINER}" psql -U "${DB_USER}" -d "${DB_NAME}" -t -c \
+  "SELECT COUNT(*) FROM google_ads_accounts WHERE workspace_id = '00000000-0000-0000-0000-000000000001';" | tr -d ' ')
+
 USER_EXISTS=$(docker exec "${DB_CONTAINER}" psql -U "${DB_USER}" -d "${DB_NAME}" -t -c \
   "SELECT COUNT(*) FROM auth.users WHERE id = '00000000-0000-0000-0000-00000000000a';" | tr -d ' ')
 
@@ -197,10 +211,11 @@ echo ""
 echo "============================================================"
 echo "  FinalTrack — Dev environment ready"
 echo "============================================================"
-echo "  workspaces    : ${WS_COUNT} (expected: 1)"
-echo "  offers        : ${OFFER_COUNT} (expected: 3)"
-echo "  webhook_secrets: ${WH_COUNT} (expected: 3)"
-echo "  auth.users    : ${USER_EXISTS} dev user (expected: 1)"
+echo "  workspaces         : ${WS_COUNT} (expected: 1)"
+echo "  offers             : ${OFFER_COUNT} (expected: 3)"
+echo "  webhook_secrets    : ${WH_COUNT} (expected: 3)"
+echo "  google_ads_accounts: ${GADS_COUNT} (expected: >= 3)"
+echo "  auth.users         : ${USER_EXISTS} dev user (expected: 1)"
 echo ""
 echo "  Login at : http://127.0.0.1:54323  (Supabase Studio)"
 echo "  Email    : ${DEV_EMAIL}"
