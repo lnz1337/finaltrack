@@ -1,11 +1,10 @@
-import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { Card } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Button } from '@/components/ui/button';
 import { ConnectButton } from '../integrations/connect-button';
 import { IncludeRemovedToggle } from './_components/include-removed-toggle';
+import { formatCustomerId } from '@/lib/google-ads/customer-id';
 
 interface CampaignRow {
   id: string;
@@ -102,8 +101,8 @@ export default async function CampaignsPage({
   const { data: ads } = await adsQuery.returns<AdRow[]>();
 
   type FlatRow = {
-    accountName: string;
-    accountIdShort: string;
+    accountName: string | null;
+    accountCustomerId: string; // raw — formatado no render
     campaignType: string | null;
     campaignName: string;
     campaignStatus: string;
@@ -125,20 +124,20 @@ export default async function CampaignsPage({
     if (!c) continue;
     const acc = accountById.get(c.google_ads_account_id);
     if (!acc) continue;
-    const accountName = acc.account_name ?? acc.customer_id;
-    const accountIdShort = acc.customer_id.slice(-4);
+    const accountName = acc.account_name;
+    const accountCustomerId = acc.customer_id;
 
     const adsForAg = adsByAdGroup.get(ag.id) ?? [];
     if (adsForAg.length === 0 || ag.entity_type === 'ASSET_GROUP') {
       flat.push({
-        accountName, accountIdShort, campaignType: c.campaign_type, campaignName: c.name,
+        accountName, accountCustomerId, campaignType: c.campaign_type, campaignName: c.name,
         campaignStatus: c.status, adGroupName: ag.name, adGroupStatus: ag.status,
         adName: '—', adStatus: ag.status,
       });
     } else {
       for (const ad of adsForAg) {
         flat.push({
-          accountName, accountIdShort, campaignType: c.campaign_type, campaignName: c.name,
+          accountName, accountCustomerId, campaignType: c.campaign_type, campaignName: c.name,
           campaignStatus: c.status, adGroupName: ag.name, adGroupStatus: ag.status,
           adName: ad.name ?? `(${ad.ad_type ?? 'ad'})`, adStatus: ad.status,
         });
@@ -179,7 +178,16 @@ export default async function CampaignsPage({
               const isRemoved = row.adStatus === 'REMOVED' || row.campaignStatus === 'REMOVED' || row.adGroupStatus === 'REMOVED';
               return (
                 <TableRow key={i} className={isRemoved ? 'text-muted-foreground' : ''}>
-                  <TableCell>{row.accountName}</TableCell>
+                  <TableCell>
+                    {row.accountName ? (
+                      <div className="flex flex-col">
+                        <span>{row.accountName}</span>
+                        <span className="text-xs text-muted-foreground">{formatCustomerId(row.accountCustomerId)}</span>
+                      </div>
+                    ) : (
+                      <span>{formatCustomerId(row.accountCustomerId)}</span>
+                    )}
+                  </TableCell>
                   <TableCell className="text-xs">{row.campaignType ?? '—'}</TableCell>
                   <TableCell>{row.campaignName}</TableCell>
                   <TableCell>{row.adGroupName}</TableCell>
