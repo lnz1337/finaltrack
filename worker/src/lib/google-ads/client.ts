@@ -1,4 +1,4 @@
-import { InvalidGrantError, InvalidClientError, GoogleAdsApiError } from './errors';
+import { InvalidGrantError, InvalidClientError, GoogleAdsApiError, RateLimitError, NetworkError } from './errors';
 
 export interface RefreshTokenParams {
   refreshToken: string;
@@ -42,4 +42,59 @@ export async function refreshAccessToken(p: RefreshTokenParams): Promise<Refresh
     throw new GoogleAdsApiError(`refresh_${res.status}`, res.status, await res.text());
   }
   return (await res.json()) as RefreshTokenResult;
+}
+
+export interface GoogleAdsSearchParams {
+  accessToken: string;
+  customerId: string;
+  developerToken: string;
+  managerCustomerId: string | null;
+  gaql: string;
+  pageSize?: number;
+  retries?: number; // default 0; usado em testes pra simular sem retries
+}
+
+const API_VERSION = 'v17';
+
+export async function googleAdsSearch<T = unknown>(params: GoogleAdsSearchParams): Promise<T[]> {
+  const pageSize = params.pageSize ?? 1000;
+  const url = `https://googleads.googleapis.com/${API_VERSION}/customers/${params.customerId}/googleAds:search`;
+
+  const baseHeaders: Record<string, string> = {
+    Authorization: `Bearer ${params.accessToken}`,
+    'developer-token': params.developerToken,
+    'content-type': 'application/json',
+  };
+  if (params.managerCustomerId) {
+    baseHeaders['login-customer-id'] = params.managerCustomerId;
+  }
+
+  const allResults: T[] = [];
+  let pageToken: string | undefined;
+
+  do {
+    const body: Record<string, unknown> = { query: params.gaql, pageSize };
+    if (pageToken) body.pageToken = pageToken;
+
+    let res: Response;
+    try {
+      res = await fetch(url, { method: 'POST', headers: baseHeaders, body: JSON.stringify(body) });
+    } catch (err) {
+      throw new NetworkError(err instanceof Error ? err.message : 'fetch_failed');
+    }
+
+    if (res.status === 429) {
+      const retryAfter = parseInt(res.headers.get('Retry-After') ?? '0', 10) || undefined;
+      throw new RateLimitError(retryAfter);
+    }
+    if (!res.ok) {
+      throw new Error(`googleAdsSearch ${res.status}: ${await res.text()}`);
+    }
+
+    const json = (await res.json()) as { results?: T[]; nextPageToken?: string };
+    if (Array.isArray(json.results)) allResults.push(...json.results);
+    pageToken = json.nextPageToken;
+  } while (pageToken);
+
+  return allResults;
 }
