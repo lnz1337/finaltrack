@@ -57,6 +57,10 @@ export async function validateInternalRequest(req: Request, env: Env): Promise<I
 
   if (!bearer || !jwt) throw jsonResponse(401, { error: 'missing_credentials' });
 
+  // Constant-time compare evita timing oracle no token interno.
+  // timingSafeEqualHex espera strings hex; encodamos ambos antes de comparar.
+  // Length mismatch retorna false imediatamente (info pública; não é secret).
+  // Pra inputs do mesmo tamanho, a comparação XOR é constant-time.
   const expectedHex = Array.from(new TextEncoder().encode(env.WORKER_INTERNAL_TOKEN))
     .map((b) => b.toString(16).padStart(2, '0')).join('');
   const givenHex = Array.from(new TextEncoder().encode(bearer))

@@ -1079,7 +1079,7 @@ Copiar pro `wrangler.toml` (não-commitado) e preencher valores reais (Client ID
 Conteúdo de `worker/tests/lib/internal-auth.test.ts`:
 
 ```ts
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { env } from 'cloudflare:test';
 import { validateInternalRequest } from '../../src/lib/internal-auth';
 
@@ -1112,6 +1112,13 @@ describe('validateInternalRequest', () => {
     Object.assign(env, {
       WORKER_INTERNAL_TOKEN: VALID_TOKEN,
       SUPABASE_JWT_SECRET: VALID_JWT_SECRET,
+    });
+  });
+
+  afterEach(() => {
+    Object.assign(env, {
+      WORKER_INTERNAL_TOKEN: 'test-internal-token-default',
+      SUPABASE_JWT_SECRET: 'super-secret-jwt-for-tests-default',
     });
   });
 
@@ -1238,8 +1245,9 @@ export async function validateInternalRequest(req: Request, env: Env): Promise<I
   if (!bearer || !jwt) throw jsonResponse(401, { error: 'missing_credentials' });
 
   // Constant-time compare evita timing oracle no token interno.
-  // Hex pad pra ambos terem mesmo tamanho mesmo se um for menor (timingSafeEqualHex
-  // já lida com lengths diferentes, mas usar hex já normalizado é mais barato).
+  // timingSafeEqualHex espera strings hex; encodamos ambos antes de comparar.
+  // Length mismatch retorna false imediatamente (info pública; não é secret).
+  // Pra inputs do mesmo tamanho, a comparação XOR é constant-time.
   const expectedHex = Array.from(new TextEncoder().encode(env.WORKER_INTERNAL_TOKEN))
     .map((b) => b.toString(16).padStart(2, '0')).join('');
   const givenHex = Array.from(new TextEncoder().encode(bearer))

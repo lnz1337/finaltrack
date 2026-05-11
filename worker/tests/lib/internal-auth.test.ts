@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { env } from 'cloudflare:test';
 import { validateInternalRequest } from '../../src/lib/internal-auth';
 
@@ -29,6 +29,13 @@ describe('validateInternalRequest', () => {
     Object.assign(env, {
       WORKER_INTERNAL_TOKEN: VALID_TOKEN,
       SUPABASE_JWT_SECRET: VALID_JWT_SECRET,
+    });
+  });
+
+  afterEach(() => {
+    Object.assign(env, {
+      WORKER_INTERNAL_TOKEN: 'test-internal-token-default',
+      SUPABASE_JWT_SECRET: 'super-secret-jwt-for-tests-default',
     });
   });
 
