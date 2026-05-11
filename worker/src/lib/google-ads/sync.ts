@@ -126,13 +126,17 @@ export async function syncAccount(env: Env, account: GoogleAdsAccountRow): Promi
     phaseCompleted = 'ad_groups';
 
     checkBudget('before_ads');
-    const adGroups = await sb.select<{ id: string; google_ad_group_id: string; entity_type: string }>(
+    const adGroups = await sb.select<{ id: string; google_ad_group_id: string; entity_type: string; campaign_id: string }>(
       'ad_groups',
       {
-        select: 'id,google_ad_group_id,entity_type',
+        select: 'id,google_ad_group_id,entity_type,campaign_id',
       }
     );
-    const adsTotal = await syncAds(env, sb, account, tokens.access_token, adGroups, log, startedAtIso, checkBudget);
+    // Filter in-memory por account (decisão original do plano §3.B; Postgrest composite defer).
+    // Sem isso, multi-account leak: sync de account A puxa ad_groups de account B.
+    const campaignIds = new Set(campaigns.map((c) => c.id));
+    const adGroupsForAccount = adGroups.filter((ag) => campaignIds.has(ag.campaign_id));
+    const adsTotal = await syncAds(env, sb, account, tokens.access_token, adGroupsForAccount, log, startedAtIso, checkBudget);
     rowsSynced += adsTotal.ok;
     parsedSkipped += adsTotal.skipped;
     phaseCompleted = 'ads';
