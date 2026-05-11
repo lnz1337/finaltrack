@@ -5,10 +5,11 @@ import * as client from '../../src/lib/google-ads/client';
 import { createSupabaseClient } from '../../src/lib/supabase';
 import { encryptAesGcm } from '../../src/lib/crypto';
 
-const WORKSPACE_ID = '00000000-0000-0000-0000-000000000001';
-const ACCOUNT_ID = '00000000-0000-0000-0000-00000000a100';
+const WORKSPACE_ID = '00000000-0000-0000-0000-000000000001'; // dev workspace do seed (não deletar)
 const KEY_HEX = '00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff';
-const CUSTOMER_ID = '2222222222';
+// UUID/customer_id randomizados por run — hardcoded colide com dados de dev (lição P12).
+const ACCOUNT_ID = crypto.randomUUID();
+const CUSTOMER_ID = String(Math.floor(1_000_000_000 + Math.random() * 8_999_999_999));
 
 async function setupAccount(sb: ReturnType<typeof createSupabaseClient>) {
   await sb.delete('google_ads_accounts', { id: `eq.${ACCOUNT_ID}` });

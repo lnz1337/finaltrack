@@ -2,8 +2,10 @@ import { describe, it, expect, beforeEach, afterAll } from 'vitest';
 import { env } from 'cloudflare:test';
 import { createSupabaseClient } from '../../src/lib/supabase';
 
-const WORKSPACE_ID = '00000000-0000-0000-0000-000000000001';
-const ACCOUNT_ID = '00000000-0000-0000-0000-00000000a002';
+const WORKSPACE_ID = '00000000-0000-0000-0000-000000000001'; // dev workspace do seed (não deletar)
+// UUID/customer_id randomizados por run — hardcoded colide com dados de dev (lição P12).
+const ACCOUNT_ID = crypto.randomUUID();
+const CUSTOMER_ID = String(Math.floor(1_000_000_000 + Math.random() * 8_999_999_999));
 
 describe('google_ads_sync_log', () => {
   let sb: ReturnType<typeof createSupabaseClient>;
@@ -14,15 +16,14 @@ describe('google_ads_sync_log', () => {
     await sb.insert('google_ads_accounts', {
       id: ACCOUNT_ID,
       workspace_id: WORKSPACE_ID,
-      customer_id: '1111111111',
+      customer_id: CUSTOMER_ID,
       refresh_token_encrypted: 'x',
       refresh_token_iv: 'y',
     });
   });
 
   // Cleanup pós-suite: o último teste não tem beforeEach seguinte que limpe.
-  // Sem isso, rows em google_ads_sync_log (via cascade do account) sobram e
-  // poluem /api/google-ads/sync-status em dev local. Mesmo padrão de tc_cors/match_d (phase-1-status §gotchas).
+  // Deleta APENAS o ACCOUNT_ID random deste run; cascade limpa as rows de google_ads_sync_log.
   afterAll(async () => {
     const sbCleanup = createSupabaseClient(env);
     await sbCleanup.delete('google_ads_accounts', { id: `eq.${ACCOUNT_ID}` });

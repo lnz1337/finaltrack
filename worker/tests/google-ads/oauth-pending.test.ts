@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterAll } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { env } from 'cloudflare:test';
 import { createSupabaseClient } from '../../src/lib/supabase';
 import { encryptAesGcm, decryptAesGcm } from '../../src/lib/crypto';
@@ -9,15 +9,12 @@ const KEY_HEX = '00112233445566778899aabbccddeeff00112233445566778899aabbccddeef
 describe('oauth_pending_selections CRUD', () => {
   let sb: ReturnType<typeof createSupabaseClient>;
 
+  // beforeEach limpa leftover (rows são efêmeras — têm expires_at; sem cascade pra dados persistentes).
+  // SEM afterAll que delete por workspace_id: o beforeEach do próximo run já limpa, e rows efêmeras
+  // não causam interferência (consumidor real é /select?session=UUID, não por workspace).
   beforeEach(async () => {
     sb = createSupabaseClient(env);
     await sb.delete('oauth_pending_selections', { workspace_id: `eq.${WORKSPACE_ID}` });
-  });
-
-  // Cleanup pós-suite (último teste não tem beforeEach seguinte).
-  afterAll(async () => {
-    const sbCleanup = createSupabaseClient(env);
-    await sbCleanup.delete('oauth_pending_selections', { workspace_id: `eq.${WORKSPACE_ID}` });
   });
 
   it('insere e seleciona pending session com encrypted_payload + payload_iv', async () => {
