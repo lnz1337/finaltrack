@@ -645,11 +645,15 @@ describe('oauth_pending_selections CRUD', () => {
   });
 
   it('cleanup query DELETE WHERE expires_at < NOW() pega expirados', async () => {
+    // Para satisfazer CHECK (expires_at > created_at) e ainda ter expires_at no passado:
+    // created_at = 3min atrás, expires_at = 1min atrás → expired mas válido na constraint
+    const createdAt = new Date(Date.now() - 3 * 60 * 1000).toISOString();
     const past = new Date(Date.now() - 60000).toISOString();
     await sb.insert('oauth_pending_selections', {
       workspace_id: WORKSPACE_ID,
       encrypted_payload: 'expired',
       payload_iv: 'iv',
+      created_at: createdAt,
       expires_at: past,
     });
     await sb.insert('oauth_pending_selections', {
