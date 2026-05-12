@@ -206,6 +206,16 @@ Dois bugs apareceram só no smoke runtime, ambos porque spec/plan cravaram valor
 
 **Meta-pattern (pra Fases 2B/2C/2D):** o brainstorm de cada fase que toca API externa deve incluir um step explícito de **"validar estado atual da API externa"** (versão vigente, esquema de auth, formato de tokens) antes de cravar valores no spec — não confiar no que estava documentado/no treino. Os dois bugs acima custaram um ciclo de smoke cada.
 
+#### Phase 2A — diferidos do Checkpoint 4 / smoke parcial (2026-05-12)
+
+Fechamento parcial: Passos 1-5 do smoke (`docs/runbooks/fase-2a-smoke.md`) ✅; Passos 6-9 (sync + REMOVED detection + cron + invalid_grant) bloqueados por `DEVELOPER_TOKEN_NOT_APPROVED` (Test Developer Token contra customer real). **Basic Access submetido ao Google em 2026-05-12.** PR fica em DRAFT até smoke completo. Patches durante smoke: P9-P14 (ver `fase-2a-smoke-2026-05-12.executed.md`).
+
+- **D8. AlertDialog não fecha clicando no overlay.** O shadcn `AlertDialog` de disconnect só fecha via botão (Cancelar/Desconectar) — comportamento intencional do componente pra ação destrutiva, mas alguns usuários esperam overlay-to-close. Cosmético; deixar como está salvo feedback.
+- **D9. `window.alert()` no fail do "Sincronizar agora" (viola decisão 5.7.4).** Quando o POST `/api/google-ads/sync` retorna erro, o card mostra o erro via `alert()` nativo em vez de toast/inline shadcn. Decisão 5.7.4 cravou "nunca `confirm()`/`alert()` nativo". Trocar por toast (sonner) ou mensagem inline no card. Apareceu no smoke ao bater no `DEVELOPER_TOKEN_NOT_APPROVED`.
+- **D10. `app/.../integrations/select/page.tsx` chama o Worker direto (bypassa o proxy do App).** Todos os outros caminhos App→Worker passam por um route handler em `app/app/api/google-ads/*` (que injeta `WORKER_INTERNAL_TOKEN` + `X-User-JWT` server-side). O `select/page.tsx` (server component) faz `fetch` direto pro `/oauth/google-ads/session/:uuid/preview`. Funciona (é server-side, token não vaza), mas é inconsistência arquitetural — mover pro padrão `api/google-ads/select-preview` quando mexer no fluxo de seleção.
+- **D11. RPC `mark_removed_for_account` usa `IN (SELECT …)` aninhado.** Pra contas com 10K+ ads o `UPDATE … WHERE google_ad_group_id NOT IN (SELECT … WHERE last_synced_at = $p_started_at)` pode degradar. Quando aparecer conta grande no smoke real: profile com `EXPLAIN ANALYZE`, considerar reescrever com CTE `WITH synced AS (…)` + `LEFT JOIN … WHERE synced.id IS NULL` ou anti-join.
+- **D12. Duplicação App↔Worker: `customer-id` (formatCustomerId) e `oauth-error-messages`.** Hoje N=2 cópias de cada (uma em `worker/src/lib/`, uma em `app/lib/`). Convertê-las em `packages/shared` na 4ª duplicação total (regra do monorepo). Não fazer agora — 2 cópias é tolerável, premature abstraction não.
+
 ---
 
 ## Como recuperar artefatos da conversa de planejamento
