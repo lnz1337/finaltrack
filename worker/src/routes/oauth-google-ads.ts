@@ -6,6 +6,12 @@ import { createSupabaseClient } from '../lib/supabase';
 import { encryptAesGcm, decryptAesGcm } from '../lib/crypto';
 import { formatCustomerId } from '../lib/customer-id';
 import { validateInternalRequest } from '../lib/internal-auth';
+import { createStructuredLogger } from '../lib/structured-log';
+
+function errFields(err: unknown): Record<string, unknown> {
+  if (err instanceof Error) return { error: err.message, stack: err.stack };
+  return { error: String(err) };
+}
 
 export async function handleOAuthStart(req: Request, env: Env): Promise<Response> {
   const url = new URL(req.url);
@@ -54,6 +60,7 @@ function defaultAccountName(customerId: string): string {
 }
 
 export async function handleOAuthCallback(req: Request, env: Env): Promise<Response> {
+  const log = createStructuredLogger(crypto.randomUUID(), Date.now());
   const url = new URL(req.url);
   if (url.searchParams.get('error') === 'access_denied') {
     return appRedirect(env, '/dashboard/integrations', { status: 'oauth_error', reason: 'user_cancelled' });
@@ -76,7 +83,8 @@ export async function handleOAuthCallback(req: Request, env: Env): Promise<Respo
       code, clientId: env.GOOGLE_ADS_CLIENT_ID, clientSecret: env.GOOGLE_ADS_CLIENT_SECRET,
       redirectUri: env.GOOGLE_ADS_OAUTH_REDIRECT_URI,
     });
-  } catch {
+  } catch (err) {
+    log.error('oauth_code_exchange_failed', errFields(err));
     return appRedirect(env, '/dashboard/integrations', { status: 'oauth_error', reason: 'code_exchange_failed' });
   }
 
@@ -85,10 +93,12 @@ export async function handleOAuthCallback(req: Request, env: Env): Promise<Respo
     customerIds = await listAccessibleCustomers({
       accessToken: tokens.access_token, developerToken: env.GOOGLE_ADS_DEVELOPER_TOKEN,
     });
-  } catch {
+  } catch (err) {
+    log.error('oauth_list_accessible_customers_failed', errFields(err));
     return appRedirect(env, '/dashboard/integrations', { status: 'oauth_error', reason: 'db_error' });
   }
   if (customerIds.length === 0) {
+    log.warn('oauth_no_accessible_customers', {});
     return appRedirect(env, '/dashboard/integrations', { status: 'oauth_error', reason: 'no_accounts' });
   }
 
@@ -105,9 +115,11 @@ export async function handleOAuthCallback(req: Request, env: Env): Promise<Respo
         refresh_token_iv: iv,
         is_active: true,
       }], { onConflict: 'workspace_id,customer_id' });
-    } catch {
+    } catch (err) {
+      log.error('oauth_upsert_account_failed', { ...errFields(err), workspace_id: payload.workspace_id, customer_id: customerIds[0] });
       return appRedirect(env, '/dashboard/integrations', { status: 'oauth_error', reason: 'db_error' });
     }
+    log.info('oauth_account_connected', { workspace_id: payload.workspace_id, customer_id: customerIds[0] });
     return appRedirect(env, '/dashboard/integrations', { status: 'connected' });
   }
 
@@ -118,19 +130,28 @@ export async function handleOAuthCallback(req: Request, env: Env): Promise<Respo
     customer_ids: customerIds,
   });
   const { ciphertext, iv } = await encryptAesGcm(env.ENCRYPTION_KEY, payloadJson);
-  await sb.insert('oauth_pending_selections', {
-    workspace_id: payload.workspace_id,
-    encrypted_payload: ciphertext,
-    payload_iv: iv,
-  });
-  const rows = await sb.select<{ id: string }>('oauth_pending_selections', {
-    workspace_id: `eq.${payload.workspace_id}`, encrypted_payload: `eq.${ciphertext}`,
-    select: 'id', limit: '1', order: 'created_at.desc',
-  });
-  if (!rows[0]) {
+  let pendingId: string | undefined;
+  try {
+    await sb.insert('oauth_pending_selections', {
+      workspace_id: payload.workspace_id,
+      encrypted_payload: ciphertext,
+      payload_iv: iv,
+    });
+    const rows = await sb.select<{ id: string }>('oauth_pending_selections', {
+      workspace_id: `eq.${payload.workspace_id}`, encrypted_payload: `eq.${ciphertext}`,
+      select: 'id', limit: '1', order: 'created_at.desc',
+    });
+    pendingId = rows[0]?.id;
+  } catch (err) {
+    log.error('oauth_insert_pending_failed', { ...errFields(err), workspace_id: payload.workspace_id });
     return appRedirect(env, '/dashboard/integrations', { status: 'oauth_error', reason: 'db_error' });
   }
-  return appRedirect(env, '/dashboard/integrations/select', { session: rows[0].id });
+  if (!pendingId) {
+    log.error('oauth_pending_row_not_found_after_insert', { workspace_id: payload.workspace_id });
+    return appRedirect(env, '/dashboard/integrations', { status: 'oauth_error', reason: 'db_error' });
+  }
+  log.info('oauth_pending_created', { workspace_id: payload.workspace_id, session_id: pendingId, customer_count: customerIds.length });
+  return appRedirect(env, '/dashboard/integrations/select', { session: pendingId });
 }
 
 export async function handleOAuthPreview(req: Request, env: Env, sessionUuid: string): Promise<Response> {
