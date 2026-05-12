@@ -231,10 +231,24 @@ Cada parser fica em `worker/parsers/[platform].js` (pode ser inline mas separado
 - [ ] Login + dashboard mínimo (lista de conversões)
 
 ### Fase 2 — Google Ads Sync (semana 3)
-- [ ] OAuth flow Google Ads
-- [ ] Sync de campaigns/ad_groups/ads
-- [ ] Cost sync on-demand + cron backup
-- [ ] Dashboard com ROAS/spend/revenue por campaign
+**Fase 2A — OAuth + Metadata Sync: ENTREGUE (smoke parcial · 2026-05-12).** Sync real (`googleAdsSearch`) bloqueado por `DEVELOPER_TOKEN_NOT_APPROVED` — Basic Access submetido ao Google 2026-05-12. PR em DRAFT até smoke 9/9. Spec: `docs/specs/fase-2a-google-ads-connect.md` · Plan: `docs/plans/fase-2a-google-ads-connect.md` · Runbook: `docs/runbooks/fase-2a-smoke.md`.
+- [x] OAuth flow Google Ads (start → consent → callback; single + multi-customer com `/integrations/select`)
+- [x] Sync de campaigns/ad_groups/ads (orchestrator `syncAccount`; REMOVED detection via RPC `mark_removed_for_account`) — 258 testes verde; smoke runtime aguarda token
+- [x] Cron diário backup (`scheduled()` 0 3 * * *) + cleanup de `oauth_pending_selections` expirados
+- [ ] Cost sync on-demand (Fase 2B)
+- [ ] Dashboard com ROAS/spend/revenue por campaign (depende de cost sync)
+
+**Endpoints Worker da Fase 2A** (todos `INT` = `Authorization: Bearer ${WORKER_INTERNAL_TOKEN}` + `X-User-JWT`, exceto onde notado — ver `worker/src/lib/internal-auth.ts` e spec §8.1):
+- `GET  /oauth/google-ads/start?workspace_id=` — `PUB` (sessão Supabase): 302 → Google consent + cookie `lt_oauth_state` (HMAC, CSRF)
+- `GET  /oauth/google-ads/callback?code=&state=` — `PUB` (state cookie): 302 → App `?status=connected` (1 customer) ou `/integrations/select?session=` (2+)
+- `GET  /oauth/google-ads/session/:uuid/preview` — `INT`: `{session_id, customer_ids[], expires_at}` (404 mismatch, 410 expirada)
+- `POST /oauth/google-ads/finalize` — `INT`: `{session_uuid, customer_ids[]}` → `{accounts_created}`
+- `POST /api/google-ads/sync` — `INT`: `{google_ads_account_id}` → `{log_id, status, started_at}` (409 sync_in_progress)
+- `GET  /api/google-ads/sync-status?account_id=` — `INT`: status do último sync (UI faz polling adaptativo, decisão 5.7.2)
+- `POST /api/google-ads/disconnect` — `INT`: `{google_ads_account_id}` → `{is_active:false}` (soft delete; histórico preservado)
+- `scheduled()` cron `0 3 * * *` — `CRON`: itera `google_ads_accounts WHERE is_active=true` → `syncAccount(...,'cron')`; depois `DELETE FROM oauth_pending_selections WHERE expires_at < NOW()`
+
+App proxies em `app/app/api/google-ads/*/route.ts` (injetam `WORKER_INTERNAL_TOKEN` server-side; nunca chega ao browser).
 
 ### Fase 3 — Enhanced Conversions (semana 4)
 - [ ] SHA256 hashing de email/phone
@@ -274,6 +288,9 @@ Cada parser fica em `worker/parsers/[platform].js` (pode ser inline mas separado
 | 006 | shadcn/ui + Tailwind | Consistência com NexStage; copy-paste de componentes |
 | 007 | Server Components onde der | Performance + menor bundle |
 | 008 | UTM pipe format `Name|ID` | Compatibilidade UTMify, facilita migração |
+| 009 | (Fase 2A) Auth App→Worker: `WORKER_INTERNAL_TOKEN` (timing-safe) é primary auth; `X-User-JWT` só decodado, não verificado | Supabase moderno assina access_token com ES256/JWKS, não HS256+shared-secret. JWT verify aqui seria defense-in-depth. Tech debt pre-prod: migrar pra JWKS verify (lib `jose`). Ver `internal-auth.ts` + spec §8.1 |
+| 010 | (Fase 2A) Google Ads API v23, versão pinada em `worker/src/lib/google-ads/constants.ts` | v17 foi sunsetted (404). Google deprecia ~3 versões/ano; revisar a cada ~6 meses |
+| 011 | (Fase 2A) Confirmação destrutiva = shadcn `AlertDialog`, nunca `confirm()`/`alert()` nativo | Consistência com NexStage; UX de ações irreversíveis (disconnect) |
 
 ---
 

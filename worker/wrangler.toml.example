@@ -3,6 +3,10 @@ main = "src/index.ts"
 compatibility_date = "2024-09-01"
 compatibility_flags = ["nodejs_compat"]
 
+# Cron diário 03:00 UTC — sync metadata Google Ads + cleanup oauth_pending (Fase 2A)
+[triggers]
+crons = ["0 3 * * *"]
+
 [vars]
 ENV = "development"
 ALLOWED_TRACKING_ORIGINS = "http://localhost:3000,http://localhost:4000,https://example.com"
@@ -16,6 +20,18 @@ ALLOWED_TRACKING_ORIGINS = "http://localhost:3000,http://localhost:4000,https://
 # DEV_KIWIFY_SECRET           # só em dev
 # DEV_HOTMART_SECRET          # só em dev
 # DEV_PAYT_SECRET             # só em dev
+
+# Google Ads OAuth + API (Fase 2A)
+GOOGLE_ADS_CLIENT_ID = "<from Google Cloud Console>"
+GOOGLE_ADS_CLIENT_SECRET = "<from Google Cloud Console — keep secret>"
+GOOGLE_ADS_DEVELOPER_TOKEN = "<from Google Ads API Center — keep secret>"
+GOOGLE_ADS_OAUTH_REDIRECT_URI = "http://localhost:8787/oauth/google-ads/callback"
+APP_BASE_URL = "http://localhost:3000"
+
+# Internal auth App↔Worker (Fase 2A) — primary auth do canal.
+# O X-User-JWT (Supabase access_token) é só decodado, não verificado:
+# Supabase moderno usa ES256/JWKS, não HS256+shared-secret. Ver internal-auth.ts.
+WORKER_INTERNAL_TOKEN = "<gere via: openssl rand -hex 32>"
 
 # Pra dev local, criar arquivo .dev.vars (gitignored) com:
 # SUPABASE_URL="http://localhost:54321"

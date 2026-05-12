@@ -180,6 +180,42 @@ Bugs encadeados resolvidos durante execução manual do E2E (Steps 10-12). Todos
 - **Migration 002 usa volatile DEFAULT em `ALTER ADD COLUMN`.** Em prod com volume, splittar em 3 statements (ALTER ADD nullable → UPDATE backfill → ALTER SET NOT NULL). Documentado no header do arquivo `supabase/migrations/20260503000002_webhook_endpoint_token.sql`.
 - **Flakiness transient no vitest pool de Cloudflare Workers.** Observado pós-commit `6da4c90` (Payt is_test propagation): primeira execução de `pnpm test` falhou em 1 teste não-identificado, re-run imediato veio limpo. Provável race no test pool de `@cloudflare/vitest-pool-workers`. Sintoma adjacente já documentado: erros TS de tuple length 0 no runner `cloudflare:test`. Provável mesma origem upstream. Não-bloqueante hoje (re-run resolve), mas vale watch upstream pra fix oficial.
 
+#### Phase 2A — diferidos do Checkpoint 1 (2026-05-11)
+
+Findings do code-quality review da Phase 1 da Fase 2A que Leo aprovou como tech debt em vez de fix imediato. Bloqueantes resolvidos via patches P1-P4 (commits `84cf001`, `180916f`, `fa5f2cd`, `513de13`).
+
+- **D1. Comment "cost_sync_log pre-condition: 0 rows" em migration 004.** A constraint `status CHECK (status IN ('running','success','partial','failed'))` falharia em ALTER se existissem rows com status fora do set. Hoje tabela vazia = OK. Comment de 1 linha; adicionar se mexer no arquivo por outro motivo.
+- **D2. Cobertura adicional `ad_groups_marked` + `ads_marked` da RPC `mark_removed_for_account`.** Cenários da Task 3 (mark-removed.test.ts) só assertam `campaigns_marked`. Cascade ad_groups/ads não tem cobertura integration direta — confiamos no smoke Phase 8 contra volume real. Considerar fixtures dedicados quando Tasks 6+ trouxerem dados de ad_groups e ads.
+- **D3. Remover `SbExtended` interface redundante em `mark-removed.test.ts`.** Foi adicionada antes de `rpc()` entrar no `SupabaseClient` real. Hoje o `ReturnType<typeof createSupabaseClient>` já cobre `rpc`. Cleanup cosmético.
+- **D4. Comment "uses JS clock; OK for local + prod (drift < 1s irrelevant for 10min TTL)" em `oauth-pending.test.ts`.** Test #3 usa `new Date().toISOString()` do JS pra cleanup DELETE filter — assume sync com clock do Postgres. Local Supabase = mesma máquina, sem drift. Comment de 1 linha.
+- **D5. Assertion bidirecional em `oauth-pending.test.ts` Test #2 expires_at.** `Math.abs(expires_at - target) < 5000` aceita drift nos dois lados (ex.: 4s antes do esperado seria sinal de bug e o teste aprovaria). Trocar por `expect(expires_at).toBeGreaterThanOrEqual(target); expect(expires_at - target).toBeLessThan(5000);`. Cosmético.
+
+#### Phase 2A — diferidos do Checkpoint 2 (2026-05-11)
+
+Findings do review da Phase 2-4 (Libs Worker + Google Ads namespace + sync orchestrator) que Leo aprovou como tech debt em vez de fix imediato. Bloqueantes resolvidos via patches P5-P8 (commits `be8ef1e`, `1a22adc`, `c088a2a`).
+
+- **D6. `partialSkipped` variable lifecycle em `sync.ts`.** Declarada como `let partialSkipped: Record<string, unknown> | null = null` no top do try-block mas só atribuída dentro do catch (branch `TimeBudgetError`). Outside catch fica `null`. Pattern let-then-catch-assign é válido, não cria bug, mas cheira a leftover de design anterior. Polish se mexer no orchestrator por outro motivo.
+- **D7. Cobertura de branches do orchestrator (`syncAccount`).** Os 5 testes da Task 22 cobrem: happy path, zombie cleanup, 409 in-progress, invalid_grant cascade, REMOVED detection. NÃO cobertos por test dedicado: (a) `TimeBudgetError` mid-phase abort com partial_skipped JSONB completo, (b) `RateLimitError` + retry-after propagation, (c) `NetworkError` num syncCampaigns vs syncAds (caminhos diferentes de cleanup), (d) `upsertWithBisect` real bisect chain durante sync (Task 13 testa em isolation; orchestrator não). Smoke Phase 7-8 vai exercitar na prática contra Google Ads test customer. Adiciona tests dedicados pós-merge SE aparecerem bugs em smoke.
+
+#### Phase 2A — bugs de estado-externo descobertos no smoke (2026-05-12)
+
+Dois bugs apareceram só no smoke runtime, ambos porque spec/plan cravaram valores baseados num estado anterior de plataforma externa que mudou:
+
+1. **Google Ads API v17 sunsetted** → `listAccessibleCustomers` 404. Fix: upgrade global v17→v23, versão pinada em `worker/src/lib/google-ads/constants.ts`. **Tech debt:** revisar a versão da Google Ads API a cada ~6 meses (Google deprecia ~3 versões/ano, sunset ~12-14 meses depois).
+2. **Supabase access_token assinado com ES256/JWKS, não HS256+shared-secret.** Decisão 3.A.2.4 assumiu HS256; `validateInternalRequest` tentava `verifyJWT(jwt, SUPABASE_JWT_SECRET)` e dava `signature_invalid` sempre. Fix (Opção C): decode-without-verify + claims validation (`sub`, `exp`) + lookup de workspace via service_role; `WORKER_INTERNAL_TOKEN` (timing-safe) é a primary auth. `SUPABASE_JWT_SECRET` removido do `Env`/`wrangler.toml.example`/`vitest.config.ts`. **Tech debt pre-prod:** migrar pra JWKS verification real (lib `jose` + cache do endpoint JWKS de `${SUPABASE_URL}/auth/v1/.well-known/jwks.json`).
+
+**Meta-pattern (pra Fases 2B/2C/2D):** o brainstorm de cada fase que toca API externa deve incluir um step explícito de **"validar estado atual da API externa"** (versão vigente, esquema de auth, formato de tokens) antes de cravar valores no spec — não confiar no que estava documentado/no treino. Os dois bugs acima custaram um ciclo de smoke cada.
+
+#### Phase 2A — diferidos do Checkpoint 4 / smoke parcial (2026-05-12)
+
+Fechamento parcial: Passos 1-5 do smoke (`docs/runbooks/fase-2a-smoke.md`) ✅; Passos 6-9 (sync + REMOVED detection + cron + invalid_grant) bloqueados por `DEVELOPER_TOKEN_NOT_APPROVED` (Test Developer Token contra customer real). **Basic Access submetido ao Google em 2026-05-12.** PR fica em DRAFT até smoke completo. Patches durante smoke: P9-P14 (ver `fase-2a-smoke-2026-05-12.executed.md`).
+
+- **D8. AlertDialog não fecha clicando no overlay.** O shadcn `AlertDialog` de disconnect só fecha via botão (Cancelar/Desconectar) — comportamento intencional do componente pra ação destrutiva, mas alguns usuários esperam overlay-to-close. Cosmético; deixar como está salvo feedback.
+- **D9. `window.alert()` no fail do "Sincronizar agora" (viola decisão 5.7.4).** Quando o POST `/api/google-ads/sync` retorna erro, o card mostra o erro via `alert()` nativo em vez de toast/inline shadcn. Decisão 5.7.4 cravou "nunca `confirm()`/`alert()` nativo". Trocar por toast (sonner) ou mensagem inline no card. Apareceu no smoke ao bater no `DEVELOPER_TOKEN_NOT_APPROVED`.
+- **D10. `app/.../integrations/select/page.tsx` chama o Worker direto (bypassa o proxy do App).** Todos os outros caminhos App→Worker passam por um route handler em `app/app/api/google-ads/*` (que injeta `WORKER_INTERNAL_TOKEN` + `X-User-JWT` server-side). O `select/page.tsx` (server component) faz `fetch` direto pro `/oauth/google-ads/session/:uuid/preview`. Funciona (é server-side, token não vaza), mas é inconsistência arquitetural — mover pro padrão `api/google-ads/select-preview` quando mexer no fluxo de seleção.
+- **D11. RPC `mark_removed_for_account` usa `IN (SELECT …)` aninhado.** Pra contas com 10K+ ads o `UPDATE … WHERE google_ad_group_id NOT IN (SELECT … WHERE last_synced_at = $p_started_at)` pode degradar. Quando aparecer conta grande no smoke real: profile com `EXPLAIN ANALYZE`, considerar reescrever com CTE `WITH synced AS (…)` + `LEFT JOIN … WHERE synced.id IS NULL` ou anti-join.
+- **D12. Duplicação App↔Worker: `customer-id` (formatCustomerId) e `oauth-error-messages`.** Hoje N=2 cópias de cada (uma em `worker/src/lib/`, uma em `app/lib/`). Convertê-las em `packages/shared` na 4ª duplicação total (regra do monorepo). Não fazer agora — 2 cópias é tolerável, premature abstraction não.
+
 ---
 
 ## Como recuperar artefatos da conversa de planejamento

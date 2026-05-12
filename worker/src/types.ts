@@ -9,6 +9,12 @@ export interface Env {
   DEV_KIWIFY_SECRET?: string;
   DEV_HOTMART_SECRET?: string;
   DEV_PAYT_SECRET?: string;
+  GOOGLE_ADS_CLIENT_ID: string;
+  GOOGLE_ADS_CLIENT_SECRET: string;
+  GOOGLE_ADS_DEVELOPER_TOKEN: string;
+  GOOGLE_ADS_OAUTH_REDIRECT_URI: string;
+  WORKER_INTERNAL_TOKEN: string;
+  APP_BASE_URL: string; // ex: http://localhost:3000 em dev
 }
 
 export type MatchMethod = 'click_id' | 'gclid_in_payload' | 'unmatched';

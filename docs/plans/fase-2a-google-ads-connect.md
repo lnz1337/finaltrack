@@ -6,7 +6,7 @@
 
 **Architecture:** Worker Cloudflare é confidential client OAuth + sync orchestrator (lib `google-ads/`). App Next.js renderiza UI + route handlers proxy autenticados pro Worker via shared secret + JWT do user. Postgres ganha 4 mudanças (Migration 004) + RPC pra mark_removed atômico. Cron diário às 03:00 UTC + cleanup de pending sessions.
 
-**Tech Stack:** TypeScript, Cloudflare Workers + Wrangler (cron + scheduled), Vitest com `@cloudflare/vitest-pool-workers` (Miniflare), Supabase (Postgres + Auth via @supabase/ssr) + RPC SQL, Next.js 16 + Server Components + route handlers, shadcn/ui (AlertDialog), Google Ads API v17.
+**Tech Stack:** TypeScript, Cloudflare Workers + Wrangler (cron + scheduled), Vitest com `@cloudflare/vitest-pool-workers` (Miniflare), Supabase (Postgres + Auth via @supabase/ssr) + RPC SQL, Next.js 16 + Server Components + route handlers, shadcn/ui (AlertDialog), Google Ads API v23 (pinada em `worker/src/lib/google-ads/constants.ts` — v17 estava sunsetted).
 
 **Spec referência:** `docs/specs/fase-2a-google-ads-connect.md` (commit `47a3080`)
 
@@ -29,6 +29,7 @@ Arquivos criados/modificados nesta fase, agrupados por responsabilidade.
 - `sync-log.ts` — `insertSyncLog`/`updateSyncLog` enforçando `sync_type` required
 
 **Worker — google-ads namespace novo (`worker/src/lib/google-ads/`):**
+- `constants.ts` — `GOOGLE_ADS_API_VERSION` + `GOOGLE_ADS_API_BASE` (versão pinada; v17 estava sunsetted → v23)
 - `errors.ts` — classes (`InvalidGrantError`, `RateLimitError`, `TimeBudgetError`, etc.)
 - `queries.ts` — strings GAQL (`CAMPAIGN_QUERY`, `AD_GROUP_QUERY`, `AD_QUERY`, `ASSET_GROUP_QUERY`)
 - `parsers.ts` — `parseCampaignRow`, `parseAdGroupRow`, `parseAdRow`, `parseAssetGroupRow`
@@ -361,7 +362,15 @@ cp migrations/004_google_ads_metadata_sync.sql supabase/migrations/2026050700000
 ```bash
 supabase db reset
 ```
-Esperado: 4 migrations aplicadas em sequência (001, 002, 003, 004) sem erro SQL.
+Esperado: todas as migrations aplicadas em sequência sem erro SQL.
+
+- [ ] **Step 2.5: Re-seed dev workspace + auth user (OBRIGATÓRIO após reset)**
+
+```bash
+bash scripts/setup-dev.sh
+```
+
+`supabase db reset` apaga `workspaces` + `auth.users` (cleanup completo). Sem re-seed, integration tests da Phase 1 (Tasks 3-5) batem em `FK violation: workspace_id not present in workspaces`. Esse passo virou obrigatório após execução da Phase 1 onde o implementer da Task 3 perdeu ~30min reparando manualmente.
 
 - [ ] **Step 3: Smoke check — schema novo presente**
 
@@ -471,7 +480,7 @@ describe('mark_removed_for_account RPC', () => {
   });
 
   it('cenário b: campaigns com last_synced_at antigo são marcadas REMOVED', async () => {
-    const oldSync = new Date(Date.now() - 10000).toISOString();
+    const oldSync = new Date(Date.now() - 60 * 60 * 1000).toISOString(); // 1h margin
     await insertCampaign(sb, '00000000-0000-0000-0000-00000000c001', oldSync);
     await insertCampaign(sb, '00000000-0000-0000-0000-00000000c002', oldSync);
 
@@ -490,7 +499,7 @@ describe('mark_removed_for_account RPC', () => {
   });
 
   it('cenário c: campaigns já em REMOVED não são re-tocadas (idempotência)', async () => {
-    const oldSync = new Date(Date.now() - 10000).toISOString();
+    const oldSync = new Date(Date.now() - 60 * 60 * 1000).toISOString(); // 1h margin
     await insertCampaign(sb, '00000000-0000-0000-0000-00000000c003', oldSync, 'REMOVED');
 
     const startedAt = new Date(Date.now() - 1000).toISOString();
@@ -637,11 +646,15 @@ describe('oauth_pending_selections CRUD', () => {
   });
 
   it('cleanup query DELETE WHERE expires_at < NOW() pega expirados', async () => {
+    // Para satisfazer CHECK (expires_at > created_at) e ainda ter expires_at no passado:
+    // created_at = 3min atrás, expires_at = 1min atrás → expired mas válido na constraint
+    const createdAt = new Date(Date.now() - 3 * 60 * 1000).toISOString();
     const past = new Date(Date.now() - 60000).toISOString();
     await sb.insert('oauth_pending_selections', {
       workspace_id: WORKSPACE_ID,
       encrypted_payload: 'expired',
       payload_iv: 'iv',
+      created_at: createdAt,
       expires_at: past,
     });
     await sb.insert('oauth_pending_selections', {
@@ -1023,6 +1036,8 @@ git commit -m "feat(worker): structured-log com schema cravado e trace_id propag
 
 ## Task 8: `internal-auth.ts` + tests (validateInternalRequest)
 
+> **PATCH pós-smoke (2026-05-12):** o código abaixo assume verificação HS256 do `X-User-JWT` via `SUPABASE_JWT_SECRET`. Isso quebrou em runtime — Supabase moderno assina com ES256/JWKS. Implementação real adotou **decode-without-verify + claims validation + workspace lookup** (`WORKER_INTERNAL_TOKEN` é a primary auth); `SUPABASE_JWT_SECRET` foi removido de `Env`/`wrangler.toml.example`/`vitest.config.ts`. Ver `worker/src/lib/internal-auth.ts` (comentário no código), spec §8.1, e tech debt em `docs/plans/phase-1-status.md` (migrar pra JWKS verify pre-prod). Os trechos de código deste task ficam aqui como registro do design original.
+
 **Files:**
 - Create: `worker/src/lib/internal-auth.ts`
 - Create: `worker/tests/lib/internal-auth.test.ts`
@@ -1067,7 +1082,7 @@ Copiar pro `wrangler.toml` (não-commitado) e preencher valores reais (Client ID
 Conteúdo de `worker/tests/lib/internal-auth.test.ts`:
 
 ```ts
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { env } from 'cloudflare:test';
 import { validateInternalRequest } from '../../src/lib/internal-auth';
 
@@ -1100,6 +1115,13 @@ describe('validateInternalRequest', () => {
     Object.assign(env, {
       WORKER_INTERNAL_TOKEN: VALID_TOKEN,
       SUPABASE_JWT_SECRET: VALID_JWT_SECRET,
+    });
+  });
+
+  afterEach(() => {
+    Object.assign(env, {
+      WORKER_INTERNAL_TOKEN: 'test-internal-token-default',
+      SUPABASE_JWT_SECRET: 'super-secret-jwt-for-tests-default',
     });
   });
 
@@ -1226,8 +1248,9 @@ export async function validateInternalRequest(req: Request, env: Env): Promise<I
   if (!bearer || !jwt) throw jsonResponse(401, { error: 'missing_credentials' });
 
   // Constant-time compare evita timing oracle no token interno.
-  // Hex pad pra ambos terem mesmo tamanho mesmo se um for menor (timingSafeEqualHex
-  // já lida com lengths diferentes, mas usar hex já normalizado é mais barato).
+  // timingSafeEqualHex espera strings hex; encodamos ambos antes de comparar.
+  // Length mismatch retorna false imediatamente (info pública; não é secret).
+  // Pra inputs do mesmo tamanho, a comparação XOR é constant-time.
   const expectedHex = Array.from(new TextEncoder().encode(env.WORKER_INTERNAL_TOKEN))
     .map((b) => b.toString(16).padStart(2, '0')).join('');
   const givenHex = Array.from(new TextEncoder().encode(bearer))
@@ -1435,7 +1458,7 @@ git commit -m "feat(worker): error classes do namespace google-ads"
 Conteúdo de `worker/src/lib/google-ads/queries.ts`:
 
 ```ts
-// GAQL queries pra Google Ads API v17.
+// GAQL queries pra Google Ads API v23.
 // Usar templates pra interpolar resource names (campaign='customers/X/campaigns/Y').
 // Status filter inclui REMOVED pra que sync detecte e refletida via mark_removed.
 
@@ -1491,7 +1514,7 @@ WHERE asset_group.campaign = '${campaignResource}'
 
 ```bash
 git add worker/src/lib/google-ads/queries.ts
-git commit -m "feat(worker): GAQL queries v17 pra campaigns/ad_groups/ads/asset_groups"
+git commit -m "feat(worker): GAQL queries v23 pra campaigns/ad_groups/ads/asset_groups"
 ```
 
 ---
@@ -2706,8 +2729,11 @@ describe('googleAdsSearch', () => {
 
 Append ao `worker/src/lib/google-ads/client.ts`:
 
+> Pré-req: criar `worker/src/lib/google-ads/constants.ts` com `export const GOOGLE_ADS_API_VERSION = 'v23'; export const GOOGLE_ADS_API_BASE = \`https://googleads.googleapis.com/${GOOGLE_ADS_API_VERSION}\`;`. Versão pinada num lugar só — v17 estava sunsetted (404); revisar a cada ~6 meses (tech debt §13 do spec).
+
 ```ts
 import { RateLimitError, NetworkError } from './errors';
+import { GOOGLE_ADS_API_BASE } from './constants';
 
 export interface GoogleAdsSearchParams {
   accessToken: string;
@@ -2719,11 +2745,9 @@ export interface GoogleAdsSearchParams {
   retries?: number; // default 0; usado em testes pra simular sem retries
 }
 
-const API_VERSION = 'v17';
-
 export async function googleAdsSearch<T = unknown>(params: GoogleAdsSearchParams): Promise<T[]> {
   const pageSize = params.pageSize ?? 1000;
-  const url = `https://googleads.googleapis.com/${API_VERSION}/customers/${params.customerId}/googleAds:search`;
+  const url = `${GOOGLE_ADS_API_BASE}/customers/${params.customerId}/googleAds:search`;
 
   const baseHeaders: Record<string, string> = {
     Authorization: `Bearer ${params.accessToken}`,
@@ -2838,7 +2862,7 @@ export interface ListAccessibleParams {
 }
 
 export async function listAccessibleCustomers(p: ListAccessibleParams): Promise<string[]> {
-  const url = `https://googleads.googleapis.com/${API_VERSION}/customers:listAccessibleCustomers`;
+  const url = `${GOOGLE_ADS_API_BASE}/customers:listAccessibleCustomers`;
   const res = await fetch(url, {
     method: 'GET',
     headers: {
@@ -2888,6 +2912,7 @@ import { encryptAesGcm } from '../../src/lib/crypto';
 const WORKSPACE_ID = '00000000-0000-0000-0000-000000000001';
 const ACCOUNT_ID = '00000000-0000-0000-0000-00000000a100';
 const KEY_HEX = '00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff';
+const CUSTOMER_ID = '2222222222'; // NÃO usar '1234567890' aqui — Task 3 já usa, viola UNIQUE(workspace_id, customer_id).
 
 async function setupAccount(sb: ReturnType<typeof createSupabaseClient>) {
   await sb.delete('google_ads_accounts', { id: `eq.${ACCOUNT_ID}` });
@@ -2895,7 +2920,7 @@ async function setupAccount(sb: ReturnType<typeof createSupabaseClient>) {
   await sb.insert('google_ads_accounts', {
     id: ACCOUNT_ID,
     workspace_id: WORKSPACE_ID,
-    customer_id: '1234567890',
+    customer_id: CUSTOMER_ID,
     refresh_token_encrypted: ciphertext,
     refresh_token_iv: iv,
     is_active: true,
@@ -2924,7 +2949,7 @@ describe('syncAccount orchestrator', () => {
       .mockResolvedValueOnce([]) // ad_groups for C1
       .mockResolvedValueOnce([]); // asset_groups for C1
 
-    const result = await syncAccount(env, { id: ACCOUNT_ID, workspace_id: WORKSPACE_ID, customer_id: '1234567890', manager_customer_id: null, refresh_token_encrypted: '', refresh_token_iv: '', is_active: true });
+    const result = await syncAccount(env, sb, ACCOUNT_ID, 'manual');
     expect(result.status).toBe('success');
 
     const logs = await sb.select<{ status: string; sync_type: string }>('google_ads_sync_log', {
@@ -2948,7 +2973,7 @@ describe('syncAccount orchestrator', () => {
     vi.spyOn(client, 'refreshAccessToken').mockResolvedValue({ access_token: 'AT', expires_in: 3600 });
     vi.spyOn(client, 'googleAdsSearch').mockResolvedValue([]);
 
-    await syncAccount(env, { id: ACCOUNT_ID, workspace_id: WORKSPACE_ID, customer_id: '1234567890', manager_customer_id: null, refresh_token_encrypted: '', refresh_token_iv: '', is_active: true });
+    await syncAccount(env, sb, ACCOUNT_ID, 'manual');
 
     const zombieRows = await sb.select<{ status: string; error_message: string | null }>('google_ads_sync_log', {
       google_ads_account_id: `eq.${ACCOUNT_ID}`,
@@ -2969,20 +2994,14 @@ describe('syncAccount orchestrator', () => {
       date_range_end: '2026-05-07',
     });
 
-    await expect(syncAccount(env, {
-      id: ACCOUNT_ID, workspace_id: WORKSPACE_ID, customer_id: '1234567890',
-      manager_customer_id: null, refresh_token_encrypted: '', refresh_token_iv: '', is_active: true,
-    })).rejects.toThrow(/sync_in_progress/);
+    await expect(syncAccount(env, sb, ACCOUNT_ID, 'manual')).rejects.toThrow(/sync_in_progress/);
   });
 
   it('invalid_grant marca account is_active=false', async () => {
     const { InvalidGrantError } = await import('../../src/lib/google-ads/errors');
     vi.spyOn(client, 'refreshAccessToken').mockRejectedValue(new InvalidGrantError());
 
-    await expect(syncAccount(env, {
-      id: ACCOUNT_ID, workspace_id: WORKSPACE_ID, customer_id: '1234567890',
-      manager_customer_id: null, refresh_token_encrypted: '', refresh_token_iv: '', is_active: true,
-    })).rejects.toBeInstanceOf(InvalidGrantError);
+    await expect(syncAccount(env, sb, ACCOUNT_ID, 'manual')).rejects.toBeInstanceOf(InvalidGrantError);
 
     const acc = await sb.select<{ is_active: boolean }>('google_ads_accounts', {
       id: `eq.${ACCOUNT_ID}`, select: 'is_active',
@@ -3005,10 +3024,7 @@ describe('syncAccount orchestrator', () => {
     vi.spyOn(client, 'refreshAccessToken').mockResolvedValue({ access_token: 'AT', expires_in: 3600 });
     vi.spyOn(client, 'googleAdsSearch').mockResolvedValue([]); // sync vazio
 
-    await syncAccount(env, {
-      id: ACCOUNT_ID, workspace_id: WORKSPACE_ID, customer_id: '1234567890',
-      manager_customer_id: null, refresh_token_encrypted: '', refresh_token_iv: '', is_active: true,
-    });
+    await syncAccount(env, sb, ACCOUNT_ID, 'manual');
 
     const c = await sb.select<{ status: string }>('campaigns', {
       google_ads_account_id: `eq.${ACCOUNT_ID}`,
@@ -3047,10 +3063,7 @@ import {
   parseAdRow,
   parseAssetGroupRow,
 } from './parsers';
-import {
-  TimeBudgetError,
-  InvalidGrantError,
-} from './errors';
+import { TimeBudgetError } from './errors';
 import { classifyRefreshError } from './refresh-token-error-handler';
 
 const WORKER_BUDGET_MS = 28000;
@@ -3073,14 +3086,27 @@ export interface SyncResult {
   duration_ms: number;
 }
 
-export async function syncAccount(env: Env, account: GoogleAdsAccountRow): Promise<SyncResult> {
-  const sb = createSupabaseClient(env);
+export async function syncAccount(
+  env: Env,
+  sb: ReturnType<typeof createSupabaseClient>,
+  accountId: string,
+  triggeredBy: 'manual' | 'cron'
+): Promise<SyncResult> {
+  // Fetch full account row (callers passam só accountId, função busca o resto).
+  const accounts = await sb.select<GoogleAdsAccountRow>('google_ads_accounts', {
+    id: `eq.${accountId}`,
+    select: 'id,workspace_id,customer_id,manager_customer_id,refresh_token_encrypted,refresh_token_iv,is_active',
+    limit: '1',
+  });
+  if (!accounts[0]) throw new Error(`account_not_found: ${accountId}`);
+  const account = accounts[0];
+
   const traceId = crypto.randomUUID();
   const startedAt = Date.now();
   const startedAtIso = new Date(startedAt).toISOString();
   const log = createStructuredLogger(traceId, startedAt);
 
-  log.info('sync_start', { account_id: account.id, customer_id: account.customer_id });
+  log.info('sync_start', { account_id: account.id, customer_id: account.customer_id, triggered_by: triggeredBy });
 
   // Passo 0: zombie cleanup
   const zombieThresholdIso = new Date(startedAt - ZOMBIE_THRESHOLD_MIN * 60_000).toISOString();
@@ -3108,7 +3134,7 @@ export async function syncAccount(env: Env, account: GoogleAdsAccountRow): Promi
     sync_type: 'metadata',
     status: 'running',
     trace_id: traceId,
-    triggered_by: 'on_demand',
+    triggered_by: triggeredBy,
   });
 
   function checkBudget(reason: string) {
@@ -3122,7 +3148,7 @@ export async function syncAccount(env: Env, account: GoogleAdsAccountRow): Promi
   let partialSkipped: Record<string, unknown> | null = null;
 
   try {
-    // Passo 3: decrypt + refresh
+    // Passo 3: decrypt refresh_token (já temos os campos no account fetched no top) + refresh
     const refreshToken = await decryptAesGcm(env.ENCRYPTION_KEY, account.refresh_token_encrypted, account.refresh_token_iv);
     const tokens = await refreshAccessToken({
       refreshToken,
@@ -3149,15 +3175,17 @@ export async function syncAccount(env: Env, account: GoogleAdsAccountRow): Promi
     phaseCompleted = 'ad_groups';
 
     checkBudget('before_ads');
-    const adGroups = await sb.select<{ id: string; google_ad_group_id: string; entity_type: string }>(
+    const adGroups = await sb.select<{ id: string; google_ad_group_id: string; entity_type: string; campaign_id: string }>(
       'ad_groups',
       {
-        select: 'id,google_ad_group_id,entity_type',
-        // join: só ad_groups cujo campaign pertence a este account.
-        // Postgrest filter via composite seria ideal; por hora, filtra in-memory.
+        select: 'id,google_ad_group_id,entity_type,campaign_id',
       }
     );
-    const adsTotal = await syncAds(env, sb, account, tokens.access_token, adGroups, log, startedAtIso, checkBudget);
+    // Filter in-memory por account (decisão original §3.B; Postgrest composite defer pra refactor).
+    // Sem isso, multi-account leak: sync de account A puxa ad_groups de account B.
+    const campaignIds = new Set(campaigns.map((c) => c.id));
+    const adGroupsForAccount = adGroups.filter((ag) => campaignIds.has(ag.campaign_id));
+    const adsTotal = await syncAds(env, sb, account, tokens.access_token, adGroupsForAccount, log, startedAtIso, checkBudget);
     rowsSynced += adsTotal.ok;
     parsedSkipped += adsTotal.skipped;
     phaseCompleted = 'ads';

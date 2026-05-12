@@ -68,10 +68,10 @@ Conectar contas Google Ads ao LeoTracker via OAuth e sincronizar metadados (camp
                           │
                           ▼ HTTPS
 ┌─────────────────────────────────────────────────────────────┐
-│  Google Ads API v17                                         │
+│  Google Ads API v23 (pinada em worker/.../google-ads/constants.ts) │
 │  - oauth2.googleapis.com/token                              │
-│  - googleads.googleapis.com/v17/customers:listAccessible    │
-│  - googleads.googleapis.com/v17/customers/{id}/googleAds:   │
+│  - googleads.googleapis.com/v23/customers:listAccessible    │
+│  - googleads.googleapis.com/v23/customers/{id}/googleAds:   │
 │    search (GAQL)                                            │
 └─────────────────────────────────────────────────────────────┘
 ```
@@ -110,7 +110,8 @@ Detalhadas em `docs/handoffs/2026-05-07-fase-2a-brainstorm.md` §"Decisões cons
 | 3.A.2.1 | Tabela `oauth_pending_selections`: id, workspace_id (FK), encrypted_payload, payload_iv, created_at, expires_at (DEFAULT NOW() + 10min); RLS `workspace_id IN (workspaces do owner)` |
 | 3.A.2.2 | Cleanup de pending expirados: `DELETE … WHERE expires_at < NOW()` no mesmo cron diário (sem job dedicado) |
 | 3.A.2.3 | UI de seleção minimal: checkboxes (multi-select), customer_id raw formatado (ver §8.5), countdown live; sem buscar nome amigável (1 API call por customer = quota) |
-| 3.A.2.4 | **Pattern App→Worker** (reusável pra 2B/2C): headers `Authorization: Bearer ${WORKER_INTERNAL_TOKEN}` + `X-User-JWT: ${supabase_jwt}`. Worker valida ambos via `lib/internal-auth.ts → validateInternalRequest()` que retorna `{workspaceId, userId}` ou Response 401/404 |
+| 3.A.2.4 | **Pattern App→Worker** (reusável pra 2B/2C): headers `Authorization: Bearer ${WORKER_INTERNAL_TOKEN}` (primary auth, compare timing-safe) + `X-User-JWT: ${supabase_jwt}` (apenas **decodado, não verificado** — Supabase usa ES256/JWKS, ver §8.1). Worker valida via `lib/internal-auth.ts → validateInternalRequest()` que retorna `{workspaceIds: string[], userId}` ou Response 401/404 |
+| 3.A.2.5 | `account_name` default no upsert (callback single + `/finalize` multi): se a Google API retornar nome amigável (raro neste fluxo), usa-o; senão `account_name = 'Conta ' || formatCustomerId(customer_id)` (ex.: `Conta 111-111-1111`). Zero overhead, sempre útil pra UI. Substitui fallback genérico `'Conta Google Ads'`. Aplica em `oauth-google-ads.ts` Task 32 (callback) e Task 34 (finalize) |
 | 3.A.3 | `manager_customer_id` NULL na 2A; comment inline documenta que valor preenchido vira header `login-customer-id` quando cliente terceiro for conectado |
 | 3.B.4 | Concorrência cron+manual: passo 0 do `syncAccount` faz UPDATE zombie cleanup (`WHERE started_at < NOW() - INTERVAL '5 minutes' AND status='running'`). Passo seguinte: 409 se há run `'running'` < 5min |
 | 3.B.5.1 | Sem backfill de `google_campaign_id` em `clicks` pré-sync. Tech debt explícito da 2B |
@@ -301,9 +302,9 @@ X-User-JWT: ${supabase_session_jwt}
 ```
 
 **Worker-side validation (`validateInternalRequest`):**
-1. `timingSafeEqual` do bearer vs `WORKER_INTERNAL_TOKEN` → 401 se diferente.
-2. `verifyJWT(jwt, SUPABASE_JWT_SECRET)` → 401 se inválido/expirado.
-3. Extrai `user_id` do JWT, busca workspaces do user via `SELECT id FROM workspaces WHERE owner_id = $user_id` (lista — schema atual permite N workspaces por owner).
+1. `timingSafeEqual` do bearer vs `WORKER_INTERNAL_TOKEN` → 401 se diferente. **Esta é a primary auth do canal App→Worker.**
+2. **Decode (sem verify) do `X-User-JWT`** + claims validation (`sub`, `exp`) → 401 se malformado / sem claims / expirado. Não verifica assinatura: Supabase moderno assina o access_token com ES256 (chave assimétrica via JWKS), não HS256 + shared secret. O JWT verify seria defense-in-depth, não primary defense; App→Worker é canal confidencial entre serviços controlados. **Tech debt pre-prod:** migrar pra verificação JWKS real (lib `jose` + cache do endpoint JWKS) — ver `docs/plans/phase-1-status.md`.
+3. Extrai `user_id` (`sub`) do JWT, busca workspaces do user via `SELECT id FROM workspaces WHERE owner_id = $user_id` (lista — schema atual permite N workspaces por owner). `workspaces.owner_id` tem FK pra `auth.users`, então uma linha aqui já implica que o user existe. **Lista vazia → 401** (`jwt_error: no_workspace`).
 4. Retorna `{workspaceIds: string[], userId}`. Caller usa pra validação cruzada: SELECT da row alvo (account ou pending) e check `row.workspace_id IN workspaceIds`. Mismatch → 404 (não 403 — não vaza existência).
 5. Caso atual single-workspace por user, `workspaceIds.length === 1`. Lookup defensivo cobre futuro multi-workspace sem refactor.
 
@@ -316,9 +317,8 @@ Cada endpoint que recebe `google_ads_account_id` ou `session_uuid` no body/path 
 - `GOOGLE_ADS_DEVELOPER_TOKEN`
 - `GOOGLE_ADS_OAUTH_REDIRECT_URI`
 - `WORKER_INTERNAL_TOKEN`
-- `SUPABASE_JWT_SECRET`
 
-`ENCRYPTION_KEY` reusa o secret existente do Worker.
+`ENCRYPTION_KEY` reusa o secret existente do Worker. (`SUPABASE_JWT_SECRET` foi removido — o `X-User-JWT` é só decodado, não verificado; ver §8.1.)
 
 ---
 
@@ -439,6 +439,8 @@ Adicionar também `rpc<T>(name, params)` pra chamar `mark_removed_for_account`.
 ### 8.1 — Internal auth (decisão 3.A.2.4)
 
 Todo endpoint Worker chamado pelo App passa por `validateInternalRequest`. Cron e callbacks públicos (start/callback OAuth) não passam.
+
+**Primary auth = `WORKER_INTERNAL_TOKEN`** (compare timing-safe). O `X-User-JWT` (Supabase access_token) é só **decodado, não verificado** — Supabase moderno usa ES256/JWKS, não HS256 + shared secret. Decisão original (3.A.2.4) assumiu HS256; corrigido para decode-without-verify (Opção C) após bug em runtime. Tech debt pre-prod: migrar pra JWKS verification real. Ver `worker/src/lib/internal-auth.ts` (comentário) e `docs/plans/phase-1-status.md`.
 
 ### 8.2 — Structured logging (decisão 4.9.4)
 
@@ -707,6 +709,7 @@ Sem isso, "multi-account OAuth" pode ser mal-interpretado como "multi-tenant Saa
 | `oauth-error-messages.ts` duplicado App + Worker | Manter mensagens em sync entre packages | Considerar monorepo shared package (`packages/shared`) se duplicação crescer |
 | PMax/DG sem creative-level data | `/dashboard/campaigns` mostra asset_groups como "—" na coluna Ad | Resolvido na Fase 2D |
 | `mark_removed_for_account` RPC usa `IN (SELECT)` em ad_groups + ads | Postgres 12+ otimiza bem em volume baixo; em volume alto (>10K ads) plano pode degradar pra nested loop | Profile primeiro (`EXPLAIN ANALYZE`); se necessário, refatorar pra `WITH` CTE encadeada. Tech debt até medirmos |
+| **Versão da Google Ads API pinada** (`worker/src/lib/google-ads/constants.ts` → `GOOGLE_ADS_API_VERSION = 'v23'`) | Google moveu pra release cadence mensal em 2026. v17-v19 já sunsetted; v20 sunset Jun/2026; v21 ~Jul-Aug/2026; v22 ~Sep-Oct/2026; v23 ~Jan-Feb/2027. Chamada à API de versão sunsetted retorna **404** (foi exatamente o que quebrou o callback no smoke de 2026-05-12) | **Rotina de manutenção: revisar a versão a cada ~6 meses** (antes de Fase 5/operacional vira marco fixo). Upgrade = mudar a constante + rodar `pnpm worker:test` + smoke OAuth. Google recomenda pular versões intermediárias (upgrade direto pra current stable). Validar GAQL schemas + parsers a cada bump major |
 
 ---
 
