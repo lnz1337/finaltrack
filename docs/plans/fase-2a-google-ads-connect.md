@@ -6,7 +6,7 @@
 
 **Architecture:** Worker Cloudflare é confidential client OAuth + sync orchestrator (lib `google-ads/`). App Next.js renderiza UI + route handlers proxy autenticados pro Worker via shared secret + JWT do user. Postgres ganha 4 mudanças (Migration 004) + RPC pra mark_removed atômico. Cron diário às 03:00 UTC + cleanup de pending sessions.
 
-**Tech Stack:** TypeScript, Cloudflare Workers + Wrangler (cron + scheduled), Vitest com `@cloudflare/vitest-pool-workers` (Miniflare), Supabase (Postgres + Auth via @supabase/ssr) + RPC SQL, Next.js 16 + Server Components + route handlers, shadcn/ui (AlertDialog), Google Ads API v17.
+**Tech Stack:** TypeScript, Cloudflare Workers + Wrangler (cron + scheduled), Vitest com `@cloudflare/vitest-pool-workers` (Miniflare), Supabase (Postgres + Auth via @supabase/ssr) + RPC SQL, Next.js 16 + Server Components + route handlers, shadcn/ui (AlertDialog), Google Ads API v23 (pinada em `worker/src/lib/google-ads/constants.ts` — v17 estava sunsetted).
 
 **Spec referência:** `docs/specs/fase-2a-google-ads-connect.md` (commit `47a3080`)
 
@@ -29,6 +29,7 @@ Arquivos criados/modificados nesta fase, agrupados por responsabilidade.
 - `sync-log.ts` — `insertSyncLog`/`updateSyncLog` enforçando `sync_type` required
 
 **Worker — google-ads namespace novo (`worker/src/lib/google-ads/`):**
+- `constants.ts` — `GOOGLE_ADS_API_VERSION` + `GOOGLE_ADS_API_BASE` (versão pinada; v17 estava sunsetted → v23)
 - `errors.ts` — classes (`InvalidGrantError`, `RateLimitError`, `TimeBudgetError`, etc.)
 - `queries.ts` — strings GAQL (`CAMPAIGN_QUERY`, `AD_GROUP_QUERY`, `AD_QUERY`, `ASSET_GROUP_QUERY`)
 - `parsers.ts` — `parseCampaignRow`, `parseAdGroupRow`, `parseAdRow`, `parseAssetGroupRow`
@@ -1455,7 +1456,7 @@ git commit -m "feat(worker): error classes do namespace google-ads"
 Conteúdo de `worker/src/lib/google-ads/queries.ts`:
 
 ```ts
-// GAQL queries pra Google Ads API v17.
+// GAQL queries pra Google Ads API v23.
 // Usar templates pra interpolar resource names (campaign='customers/X/campaigns/Y').
 // Status filter inclui REMOVED pra que sync detecte e refletida via mark_removed.
 
@@ -1511,7 +1512,7 @@ WHERE asset_group.campaign = '${campaignResource}'
 
 ```bash
 git add worker/src/lib/google-ads/queries.ts
-git commit -m "feat(worker): GAQL queries v17 pra campaigns/ad_groups/ads/asset_groups"
+git commit -m "feat(worker): GAQL queries v23 pra campaigns/ad_groups/ads/asset_groups"
 ```
 
 ---
@@ -2726,8 +2727,11 @@ describe('googleAdsSearch', () => {
 
 Append ao `worker/src/lib/google-ads/client.ts`:
 
+> Pré-req: criar `worker/src/lib/google-ads/constants.ts` com `export const GOOGLE_ADS_API_VERSION = 'v23'; export const GOOGLE_ADS_API_BASE = \`https://googleads.googleapis.com/${GOOGLE_ADS_API_VERSION}\`;`. Versão pinada num lugar só — v17 estava sunsetted (404); revisar a cada ~6 meses (tech debt §13 do spec).
+
 ```ts
 import { RateLimitError, NetworkError } from './errors';
+import { GOOGLE_ADS_API_BASE } from './constants';
 
 export interface GoogleAdsSearchParams {
   accessToken: string;
@@ -2739,11 +2743,9 @@ export interface GoogleAdsSearchParams {
   retries?: number; // default 0; usado em testes pra simular sem retries
 }
 
-const API_VERSION = 'v17';
-
 export async function googleAdsSearch<T = unknown>(params: GoogleAdsSearchParams): Promise<T[]> {
   const pageSize = params.pageSize ?? 1000;
-  const url = `https://googleads.googleapis.com/${API_VERSION}/customers/${params.customerId}/googleAds:search`;
+  const url = `${GOOGLE_ADS_API_BASE}/customers/${params.customerId}/googleAds:search`;
 
   const baseHeaders: Record<string, string> = {
     Authorization: `Bearer ${params.accessToken}`,
@@ -2858,7 +2860,7 @@ export interface ListAccessibleParams {
 }
 
 export async function listAccessibleCustomers(p: ListAccessibleParams): Promise<string[]> {
-  const url = `https://googleads.googleapis.com/${API_VERSION}/customers:listAccessibleCustomers`;
+  const url = `${GOOGLE_ADS_API_BASE}/customers:listAccessibleCustomers`;
   const res = await fetch(url, {
     method: 'GET',
     headers: {

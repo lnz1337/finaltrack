@@ -1,4 +1,4 @@
-// GAQL queries pra Google Ads API v17.
+// GAQL queries pra Google Ads API v23.
 // Usar templates pra interpolar resource names (campaign='customers/X/campaigns/Y').
 // Status filter inclui REMOVED pra que sync detecte e refletida via mark_removed.
 

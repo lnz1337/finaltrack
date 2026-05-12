@@ -68,10 +68,10 @@ Conectar contas Google Ads ao LeoTracker via OAuth e sincronizar metadados (camp
                           │
                           ▼ HTTPS
 ┌─────────────────────────────────────────────────────────────┐
-│  Google Ads API v17                                         │
+│  Google Ads API v23 (pinada em worker/.../google-ads/constants.ts) │
 │  - oauth2.googleapis.com/token                              │
-│  - googleads.googleapis.com/v17/customers:listAccessible    │
-│  - googleads.googleapis.com/v17/customers/{id}/googleAds:   │
+│  - googleads.googleapis.com/v23/customers:listAccessible    │
+│  - googleads.googleapis.com/v23/customers/{id}/googleAds:   │
 │    search (GAQL)                                            │
 └─────────────────────────────────────────────────────────────┘
 ```
@@ -708,6 +708,7 @@ Sem isso, "multi-account OAuth" pode ser mal-interpretado como "multi-tenant Saa
 | `oauth-error-messages.ts` duplicado App + Worker | Manter mensagens em sync entre packages | Considerar monorepo shared package (`packages/shared`) se duplicação crescer |
 | PMax/DG sem creative-level data | `/dashboard/campaigns` mostra asset_groups como "—" na coluna Ad | Resolvido na Fase 2D |
 | `mark_removed_for_account` RPC usa `IN (SELECT)` em ad_groups + ads | Postgres 12+ otimiza bem em volume baixo; em volume alto (>10K ads) plano pode degradar pra nested loop | Profile primeiro (`EXPLAIN ANALYZE`); se necessário, refatorar pra `WITH` CTE encadeada. Tech debt até medirmos |
+| **Versão da Google Ads API pinada** (`worker/src/lib/google-ads/constants.ts` → `GOOGLE_ADS_API_VERSION = 'v23'`) | Google moveu pra release cadence mensal em 2026. v17-v19 já sunsetted; v20 sunset Jun/2026; v21 ~Jul-Aug/2026; v22 ~Sep-Oct/2026; v23 ~Jan-Feb/2027. Chamada à API de versão sunsetted retorna **404** (foi exatamente o que quebrou o callback no smoke de 2026-05-12) | **Rotina de manutenção: revisar a versão a cada ~6 meses** (antes de Fase 5/operacional vira marco fixo). Upgrade = mudar a constante + rodar `pnpm worker:test` + smoke OAuth. Google recomenda pular versões intermediárias (upgrade direto pra current stable). Validar GAQL schemas + parsers a cada bump major |
 
 ---
 

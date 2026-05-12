@@ -1,4 +1,5 @@
 import { InvalidGrantError, InvalidClientError, GoogleAdsApiError, RateLimitError, NetworkError } from './errors';
+import { GOOGLE_ADS_API_BASE } from './constants';
 
 export interface RefreshTokenParams {
   refreshToken: string;
@@ -54,11 +55,9 @@ export interface GoogleAdsSearchParams {
   retries?: number; // default 0; usado em testes pra simular sem retries
 }
 
-const API_VERSION = 'v17';
-
 export async function googleAdsSearch<T = unknown>(params: GoogleAdsSearchParams): Promise<T[]> {
   const pageSize = params.pageSize ?? 1000;
-  const url = `https://googleads.googleapis.com/${API_VERSION}/customers/${params.customerId}/googleAds:search`;
+  const url = `${GOOGLE_ADS_API_BASE}/customers/${params.customerId}/googleAds:search`;
 
   const baseHeaders: Record<string, string> = {
     Authorization: `Bearer ${params.accessToken}`,
@@ -105,7 +104,7 @@ export interface ListAccessibleParams {
 }
 
 export async function listAccessibleCustomers(p: ListAccessibleParams): Promise<string[]> {
-  const url = `https://googleads.googleapis.com/${API_VERSION}/customers:listAccessibleCustomers`;
+  const url = `${GOOGLE_ADS_API_BASE}/customers:listAccessibleCustomers`;
   const res = await fetch(url, {
     method: 'GET',
     headers: {
