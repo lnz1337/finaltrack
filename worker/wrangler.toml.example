@@ -3,6 +3,10 @@ main = "src/index.ts"
 compatibility_date = "2024-09-01"
 compatibility_flags = ["nodejs_compat"]
 
+# Cron diário 03:00 UTC — sync metadata Google Ads + cleanup oauth_pending (Fase 2A)
+[triggers]
+crons = ["0 3 * * *"]
+
 [vars]
 ENV = "development"
 ALLOWED_TRACKING_ORIGINS = "http://localhost:3000,http://localhost:4000,https://example.com"
