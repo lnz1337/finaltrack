@@ -23,15 +23,24 @@ export async function POST(req: Request) {
 
   const workerBase = process.env.WORKER_BASE_URL ?? 'http://localhost:8787';
   const workerToken = process.env.WORKER_INTERNAL_TOKEN ?? '';
-  const res = await fetch(`${workerBase}/api/google-ads/sync`, {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      Authorization: `Bearer ${workerToken}`,
-      'X-User-JWT': session.access_token,
-    },
-    body: JSON.stringify({ google_ads_account_id: body.google_ads_account_id }),
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${workerBase}/api/google-ads/sync`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        Authorization: `Bearer ${workerToken}`,
+        'X-User-JWT': session.access_token,
+      },
+      body: JSON.stringify({ google_ads_account_id: body.google_ads_account_id }),
+    });
+  } catch (err) {
+    return Response.json(
+      { error: 'worker_unreachable', message: err instanceof Error ? err.message : String(err) },
+      { status: 502 }
+    );
+  }
+  // Proxy verbatim: o Worker já devolve { error, message } com detalhe no body em caso de 500.
   return new Response(await res.text(), {
     status: res.status,
     headers: { 'content-type': res.headers.get('content-type') ?? 'application/json' },

@@ -185,13 +185,19 @@ export async function syncAccount(
       log.error('account_marked_inactive', { reason: classification.reason });
     }
 
+    const errMessage = err instanceof Error ? err.message : String(err);
     await updateSyncLog(sb, logId, {
       status: 'failed',
-      error_message: err instanceof Error ? err.message : String(err),
+      error_message: errMessage,
       duration_ms: durationMs,
       completed_at: new Date().toISOString(),
     });
-    log.error('sync_failed', { reason: classification.reason });
+    log.error('sync_failed', {
+      reason: classification.reason,
+      error_message: errMessage,
+      error_type: err instanceof Error ? err.name : typeof err,
+      error_stack: err instanceof Error ? err.stack : undefined,
+    });
     throw err;
   }
 }
