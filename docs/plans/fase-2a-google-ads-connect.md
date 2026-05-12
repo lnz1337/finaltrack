@@ -1036,6 +1036,8 @@ git commit -m "feat(worker): structured-log com schema cravado e trace_id propag
 
 ## Task 8: `internal-auth.ts` + tests (validateInternalRequest)
 
+> **PATCH pós-smoke (2026-05-12):** o código abaixo assume verificação HS256 do `X-User-JWT` via `SUPABASE_JWT_SECRET`. Isso quebrou em runtime — Supabase moderno assina com ES256/JWKS. Implementação real adotou **decode-without-verify + claims validation + workspace lookup** (`WORKER_INTERNAL_TOKEN` é a primary auth); `SUPABASE_JWT_SECRET` foi removido de `Env`/`wrangler.toml.example`/`vitest.config.ts`. Ver `worker/src/lib/internal-auth.ts` (comentário no código), spec §8.1, e tech debt em `docs/plans/phase-1-status.md` (migrar pra JWKS verify pre-prod). Os trechos de código deste task ficam aqui como registro do design original.
+
 **Files:**
 - Create: `worker/src/lib/internal-auth.ts`
 - Create: `worker/tests/lib/internal-auth.test.ts`

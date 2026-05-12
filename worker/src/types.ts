@@ -14,7 +14,6 @@ export interface Env {
   GOOGLE_ADS_DEVELOPER_TOKEN: string;
   GOOGLE_ADS_OAUTH_REDIRECT_URI: string;
   WORKER_INTERNAL_TOKEN: string;
-  SUPABASE_JWT_SECRET: string;
   APP_BASE_URL: string; // ex: http://localhost:3000 em dev
 }
 

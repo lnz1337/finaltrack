@@ -12,7 +12,6 @@ export default defineWorkersConfig({
           bindings: {
             TEST_SEED_USER_ID: process.env.TEST_SEED_USER_ID ?? '00000000-0000-0000-0000-00000000000a',
             WORKER_INTERNAL_TOKEN: 'test-internal-token-default',
-            SUPABASE_JWT_SECRET: 'super-secret-jwt-for-tests-default',
           },
         },
       },

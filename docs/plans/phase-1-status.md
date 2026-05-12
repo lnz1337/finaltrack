@@ -197,6 +197,15 @@ Findings do review da Phase 2-4 (Libs Worker + Google Ads namespace + sync orche
 - **D6. `partialSkipped` variable lifecycle em `sync.ts`.** Declarada como `let partialSkipped: Record<string, unknown> | null = null` no top do try-block mas só atribuída dentro do catch (branch `TimeBudgetError`). Outside catch fica `null`. Pattern let-then-catch-assign é válido, não cria bug, mas cheira a leftover de design anterior. Polish se mexer no orchestrator por outro motivo.
 - **D7. Cobertura de branches do orchestrator (`syncAccount`).** Os 5 testes da Task 22 cobrem: happy path, zombie cleanup, 409 in-progress, invalid_grant cascade, REMOVED detection. NÃO cobertos por test dedicado: (a) `TimeBudgetError` mid-phase abort com partial_skipped JSONB completo, (b) `RateLimitError` + retry-after propagation, (c) `NetworkError` num syncCampaigns vs syncAds (caminhos diferentes de cleanup), (d) `upsertWithBisect` real bisect chain durante sync (Task 13 testa em isolation; orchestrator não). Smoke Phase 7-8 vai exercitar na prática contra Google Ads test customer. Adiciona tests dedicados pós-merge SE aparecerem bugs em smoke.
 
+#### Phase 2A — bugs de estado-externo descobertos no smoke (2026-05-12)
+
+Dois bugs apareceram só no smoke runtime, ambos porque spec/plan cravaram valores baseados num estado anterior de plataforma externa que mudou:
+
+1. **Google Ads API v17 sunsetted** → `listAccessibleCustomers` 404. Fix: upgrade global v17→v23, versão pinada em `worker/src/lib/google-ads/constants.ts`. **Tech debt:** revisar a versão da Google Ads API a cada ~6 meses (Google deprecia ~3 versões/ano, sunset ~12-14 meses depois).
+2. **Supabase access_token assinado com ES256/JWKS, não HS256+shared-secret.** Decisão 3.A.2.4 assumiu HS256; `validateInternalRequest` tentava `verifyJWT(jwt, SUPABASE_JWT_SECRET)` e dava `signature_invalid` sempre. Fix (Opção C): decode-without-verify + claims validation (`sub`, `exp`) + lookup de workspace via service_role; `WORKER_INTERNAL_TOKEN` (timing-safe) é a primary auth. `SUPABASE_JWT_SECRET` removido do `Env`/`wrangler.toml.example`/`vitest.config.ts`. **Tech debt pre-prod:** migrar pra JWKS verification real (lib `jose` + cache do endpoint JWKS de `${SUPABASE_URL}/auth/v1/.well-known/jwks.json`).
+
+**Meta-pattern (pra Fases 2B/2C/2D):** o brainstorm de cada fase que toca API externa deve incluir um step explícito de **"validar estado atual da API externa"** (versão vigente, esquema de auth, formato de tokens) antes de cravar valores no spec — não confiar no que estava documentado/no treino. Os dois bugs acima custaram um ciclo de smoke cada.
+
 ---
 
 ## Como recuperar artefatos da conversa de planejamento

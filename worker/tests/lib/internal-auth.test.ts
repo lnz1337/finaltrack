@@ -3,18 +3,15 @@ import { env } from 'cloudflare:test';
 import { validateInternalRequest } from '../../src/lib/internal-auth';
 
 const VALID_TOKEN = 'test-internal-token';
-const VALID_JWT_SECRET = 'super-secret-jwt-for-tests';
 
-async function makeJwt(secret: string, payload: Record<string, unknown>, expSecondsFromNow = 3600): Promise<string> {
-  const header = { alg: 'HS256', typ: 'JWT' };
+// O Worker decoda o X-User-JWT sem verificar assinatura (Supabase usa ES256/JWKS;
+// WORKER_INTERNAL_TOKEN é a primary auth). Então a "assinatura" aqui é só placeholder.
+function makeJwt(payload: Record<string, unknown>, expSecondsFromNow = 3600): string {
+  const header = { alg: 'ES256', typ: 'JWT', kid: 'test-kid' };
   const now = Math.floor(Date.now() / 1000);
   const fullPayload = { sub: 'user-123', exp: now + expSecondsFromNow, iat: now, ...payload };
   const enc = (obj: object) => btoa(JSON.stringify(obj)).replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
-  const message = `${enc(header)}.${enc(fullPayload)}`;
-  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
-  const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(message));
-  const sigB64 = btoa(String.fromCharCode(...new Uint8Array(sig))).replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
-  return `${message}.${sigB64}`;
+  return `${enc(header)}.${enc(fullPayload)}.placeholder-signature`;
 }
 
 function makeRequest(headers: Record<string, string>): Request {
@@ -26,17 +23,11 @@ function makeRequest(headers: Record<string, string>): Request {
 
 describe('validateInternalRequest', () => {
   beforeEach(() => {
-    Object.assign(env, {
-      WORKER_INTERNAL_TOKEN: VALID_TOKEN,
-      SUPABASE_JWT_SECRET: VALID_JWT_SECRET,
-    });
+    Object.assign(env, { WORKER_INTERNAL_TOKEN: VALID_TOKEN });
   });
 
   afterEach(() => {
-    Object.assign(env, {
-      WORKER_INTERNAL_TOKEN: 'test-internal-token-default',
-      SUPABASE_JWT_SECRET: 'super-secret-jwt-for-tests-default',
-    });
+    Object.assign(env, { WORKER_INTERNAL_TOKEN: 'test-internal-token-default' });
   });
 
   it('rejeita 401 quando bearer ausente', async () => {
@@ -45,7 +36,7 @@ describe('validateInternalRequest', () => {
   });
 
   it('rejeita 401 quando bearer incorreto', async () => {
-    const jwt = await makeJwt(VALID_JWT_SECRET, { sub: 'user-123' });
+    const jwt = makeJwt({ sub: 'user-123' });
     const req = makeRequest({
       Authorization: 'Bearer wrong-token',
       'X-User-JWT': jwt,
@@ -53,8 +44,16 @@ describe('validateInternalRequest', () => {
     await expect(validateInternalRequest(req, env)).rejects.toMatchObject({ status: 401 });
   });
 
-  it('rejeita 401 quando JWT signature inválida', async () => {
-    const jwt = await makeJwt('wrong-secret', { sub: 'user-123' });
+  it('rejeita 401 quando JWT malformado', async () => {
+    const req = makeRequest({
+      Authorization: `Bearer ${VALID_TOKEN}`,
+      'X-User-JWT': 'not.a-valid-jwt',
+    });
+    await expect(validateInternalRequest(req, env)).rejects.toMatchObject({ status: 401 });
+  });
+
+  it('rejeita 401 quando JWT expirado', async () => {
+    const jwt = makeJwt({ sub: 'user-123' }, -10);
     const req = makeRequest({
       Authorization: `Bearer ${VALID_TOKEN}`,
       'X-User-JWT': jwt,
@@ -62,8 +61,8 @@ describe('validateInternalRequest', () => {
     await expect(validateInternalRequest(req, env)).rejects.toMatchObject({ status: 401 });
   });
 
-  it('rejeita 401 quando JWT expirado', async () => {
-    const jwt = await makeJwt(VALID_JWT_SECRET, { sub: 'user-123' }, -10);
+  it('rejeita 401 quando user do JWT não tem workspace', async () => {
+    const jwt = makeJwt({ sub: '00000000-0000-0000-0000-0000000000ff' });
     const req = makeRequest({
       Authorization: `Bearer ${VALID_TOKEN}`,
       'X-User-JWT': jwt,
@@ -74,7 +73,7 @@ describe('validateInternalRequest', () => {
   it('aceita request válido e retorna workspaceIds + userId', async () => {
     const SEED_USER_ID = (env as { TEST_SEED_USER_ID?: string }).TEST_SEED_USER_ID
       ?? 'replace-with-actual-seed-user-id';
-    const jwt = await makeJwt(VALID_JWT_SECRET, { sub: SEED_USER_ID });
+    const jwt = makeJwt({ sub: SEED_USER_ID });
     const req = makeRequest({
       Authorization: `Bearer ${VALID_TOKEN}`,
       'X-User-JWT': jwt,

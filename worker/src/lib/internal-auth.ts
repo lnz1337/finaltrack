@@ -23,41 +23,30 @@ function decodeBase64Url(input: string): Uint8Array {
   return out;
 }
 
-type JwtVerifyResult =
-  | { valid: true; sub: string; exp: number }
-  | { valid: false; reason: 'malformed' | 'signature_invalid' | 'expired' };
+type JwtDecodeResult =
+  | { ok: true; sub: string; exp: number }
+  | { ok: false; reason: 'malformed' | 'missing_claims' | 'expired' };
 
-async function verifySupabaseJwt(jwt: string, secret: string): Promise<JwtVerifyResult> {
+// Supabase moderno assina o access_token com ES256 (chave assimétrica via JWKS),
+// não HS256 + shared secret. O Worker NÃO verifica a assinatura — só decoda e valida
+// claims sintaticamente — porque:
+//   1. WORKER_INTERNAL_TOKEN (comparado timing-safe acima) é a primary auth do canal App→Worker.
+//   2. JWT verify aqui seria defense-in-depth, não primary defense.
+//   3. App→Worker é canal confidencial entre serviços controlados (mesma operação).
+// TECH DEBT (pre-prod): migrar pra verificação JWKS real (lib jose + cache do endpoint JWKS).
+// Tracker em docs/plans/phase-1-status.md.
+function decodeSupabaseJwt(jwt: string): JwtDecodeResult {
   const parts = jwt.split('.');
-  if (parts.length !== 3) return { valid: false, reason: 'malformed' };
-  const [headerB64, payloadB64, sigB64] = parts;
-
-  const message = `${headerB64}.${payloadB64}`;
-  const key = await crypto.subtle.importKey(
-    'raw',
-    new TextEncoder().encode(secret),
-    { name: 'HMAC', hash: 'SHA-256' },
-    false,
-    ['verify']
-  );
-  let valid: boolean;
-  try {
-    const sigBytes = decodeBase64Url(sigB64);
-    valid = await crypto.subtle.verify('HMAC', key, sigBytes, new TextEncoder().encode(message));
-  } catch {
-    return { valid: false, reason: 'malformed' };
-  }
-  if (!valid) return { valid: false, reason: 'signature_invalid' };
-
+  if (parts.length !== 3) return { ok: false, reason: 'malformed' };
   let payload: { sub?: string; exp?: number };
   try {
-    payload = JSON.parse(new TextDecoder().decode(decodeBase64Url(payloadB64)));
+    payload = JSON.parse(new TextDecoder().decode(decodeBase64Url(parts[1])));
   } catch {
-    return { valid: false, reason: 'malformed' };
+    return { ok: false, reason: 'malformed' };
   }
-  if (!payload.sub || !payload.exp) return { valid: false, reason: 'malformed' };
-  if (payload.exp < Math.floor(Date.now() / 1000)) return { valid: false, reason: 'expired' };
-  return { valid: true, sub: payload.sub, exp: payload.exp };
+  if (!payload.sub || !payload.exp) return { ok: false, reason: 'missing_claims' };
+  if (payload.exp < Math.floor(Date.now() / 1000)) return { ok: false, reason: 'expired' };
+  return { ok: true, sub: payload.sub, exp: payload.exp };
 }
 
 export async function validateInternalRequest(req: Request, env: Env): Promise<InternalAuthContext> {
@@ -106,20 +95,25 @@ export async function validateInternalRequest(req: Request, env: Env): Promise<I
     throw jsonResponse(401, { error: 'invalid_token' });
   }
 
-  const verify = await verifySupabaseJwt(jwt, env.SUPABASE_JWT_SECRET);
-  if (!verify.valid) {
-    log.warn('internal_auth_failed', { reason: 'invalid_user_jwt', x_user_jwt_present: true, jwt_error: verify.reason });
+  const decoded = decodeSupabaseJwt(jwt);
+  if (!decoded.ok) {
+    log.warn('internal_auth_failed', { reason: 'invalid_user_jwt', x_user_jwt_present: true, jwt_error: decoded.reason });
     throw jsonResponse(401, { error: 'invalid_jwt' });
   }
 
+  // workspaces.owner_id tem FK pra auth.users — uma linha aqui já implica que o user existe.
   const sb = createSupabaseClient(env);
   const workspaces = await sb.select<{ id: string }>('workspaces', {
-    owner_id: `eq.${verify.sub}`,
+    owner_id: `eq.${decoded.sub}`,
     select: 'id',
   });
+  if (workspaces.length === 0) {
+    log.warn('internal_auth_failed', { reason: 'invalid_user_jwt', x_user_jwt_present: true, jwt_error: 'no_workspace' });
+    throw jsonResponse(401, { error: 'invalid_jwt' });
+  }
 
   return {
     workspaceIds: workspaces.map((w) => w.id),
-    userId: verify.sub,
+    userId: decoded.sub,
   };
 }

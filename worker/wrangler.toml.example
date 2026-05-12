@@ -28,9 +28,10 @@ GOOGLE_ADS_DEVELOPER_TOKEN = "<from Google Ads API Center — keep secret>"
 GOOGLE_ADS_OAUTH_REDIRECT_URI = "http://localhost:8787/oauth/google-ads/callback"
 APP_BASE_URL = "http://localhost:3000"
 
-# Internal auth App↔Worker (Fase 2A)
+# Internal auth App↔Worker (Fase 2A) — primary auth do canal.
+# O X-User-JWT (Supabase access_token) é só decodado, não verificado:
+# Supabase moderno usa ES256/JWKS, não HS256+shared-secret. Ver internal-auth.ts.
 WORKER_INTERNAL_TOKEN = "<gere via: openssl rand -hex 32>"
-SUPABASE_JWT_SECRET = "<copiar de: supabase status -> JWT secret>"
 
 # Pra dev local, criar arquivo .dev.vars (gitignored) com:
 # SUPABASE_URL="http://localhost:54321"
