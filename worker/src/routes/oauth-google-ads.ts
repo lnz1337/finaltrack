@@ -3,8 +3,9 @@ import { buildConsentUrl, exchangeCodeForTokens } from '../lib/google-ads/oauth'
 import { signState, verifyState } from '../lib/google-ads/oauth-state';
 import { listAccessibleCustomers } from '../lib/google-ads/client';
 import { createSupabaseClient } from '../lib/supabase';
-import { encryptAesGcm } from '../lib/crypto';
+import { encryptAesGcm, decryptAesGcm } from '../lib/crypto';
 import { formatCustomerId } from '../lib/customer-id';
+import { validateInternalRequest } from '../lib/internal-auth';
 
 export async function handleOAuthStart(req: Request, env: Env): Promise<Response> {
   const url = new URL(req.url);
@@ -130,4 +131,40 @@ export async function handleOAuthCallback(req: Request, env: Env): Promise<Respo
     return appRedirect(env, '/dashboard/integrations', { status: 'oauth_error', reason: 'db_error' });
   }
   return appRedirect(env, '/dashboard/integrations/select', { session: rows[0].id });
+}
+
+export async function handleOAuthPreview(req: Request, env: Env, sessionUuid: string): Promise<Response> {
+  let auth: Awaited<ReturnType<typeof validateInternalRequest>>;
+  try {
+    auth = await validateInternalRequest(req, env);
+  } catch (resp) {
+    return resp as Response;
+  }
+
+  const sb = createSupabaseClient(env);
+  const rows = await sb.select<{
+    id: string; workspace_id: string; encrypted_payload: string; payload_iv: string; expires_at: string;
+  }>('oauth_pending_selections', {
+    id: `eq.${sessionUuid}`,
+    select: 'id,workspace_id,encrypted_payload,payload_iv,expires_at',
+    limit: '1',
+  });
+
+  if (!rows[0]) return new Response(JSON.stringify({ error: 'not_found' }), { status: 404 });
+  if (!auth.workspaceIds.includes(rows[0].workspace_id)) {
+    return new Response(JSON.stringify({ error: 'not_found' }), { status: 404 });
+  }
+  if (new Date(rows[0].expires_at).getTime() < Date.now()) {
+    await sb.delete('oauth_pending_selections', { id: `eq.${rows[0].id}` });
+    return new Response(JSON.stringify({ error: 'gone' }), { status: 410 });
+  }
+
+  const decrypted = await decryptAesGcm(env.ENCRYPTION_KEY, rows[0].encrypted_payload, rows[0].payload_iv);
+  const payload = JSON.parse(decrypted) as { customer_ids: string[] };
+
+  return new Response(JSON.stringify({
+    session_id: rows[0].id,
+    customer_ids: payload.customer_ids,
+    expires_at: rows[0].expires_at,
+  }), { status: 200, headers: { 'content-type': 'application/json' } });
 }
