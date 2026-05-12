@@ -22,6 +22,7 @@ GOOGLE_ADS_CLIENT_ID = "<from Google Cloud Console>"
 GOOGLE_ADS_CLIENT_SECRET = "<from Google Cloud Console — keep secret>"
 GOOGLE_ADS_DEVELOPER_TOKEN = "<from Google Ads API Center — keep secret>"
 GOOGLE_ADS_OAUTH_REDIRECT_URI = "http://localhost:8787/oauth/google-ads/callback"
+APP_BASE_URL = "http://localhost:3000"
 
 # Internal auth App↔Worker (Fase 2A)
 WORKER_INTERNAL_TOKEN = "<gere via: openssl rand -hex 32>"
