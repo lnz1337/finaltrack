@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach, afterAll } from 'vitest';
 import { env } from 'cloudflare:test';
-import { handleOAuthStart, handleOAuthCallback, handleOAuthPreview } from '../../src/routes/oauth-google-ads';
+import { handleOAuthStart, handleOAuthCallback, handleOAuthPreview, handleOAuthFinalize } from '../../src/routes/oauth-google-ads';
 import { signState } from '../../src/lib/google-ads/oauth-state';
 import * as oauth from '../../src/lib/google-ads/oauth';
 import * as client from '../../src/lib/google-ads/client';
@@ -202,5 +202,82 @@ describe('GET /oauth/google-ads/session/:uuid/preview', () => {
   afterAll(async () => {
     const sbc = createSupabaseClient(env);
     await sbc.delete('oauth_pending_selections', { workspace_id: `eq.${WID}` });
+  });
+});
+
+describe('POST /oauth/google-ads/finalize', () => {
+  const WID = '00000000-0000-0000-0000-000000000001'; // seed workspace
+  const KEY = '00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff';
+  let sb: ReturnType<typeof createSupabaseClient>;
+
+  beforeEach(async () => {
+    Object.assign(env, { ENCRYPTION_KEY: KEY });
+    sb = createSupabaseClient(env);
+    await sb.delete('oauth_pending_selections', { workspace_id: `eq.${WID}` });
+    await sb.delete('google_ads_accounts', { workspace_id: `eq.${WID}`, customer_id: 'eq.5550001111' });
+    await sb.delete('google_ads_accounts', { workspace_id: `eq.${WID}`, customer_id: 'eq.5550002222' });
+  });
+  afterEach(() => vi.restoreAllMocks());
+  afterAll(async () => {
+    const sbc = createSupabaseClient(env);
+    await sbc.delete('oauth_pending_selections', { workspace_id: `eq.${WID}` });
+    await sbc.delete('google_ads_accounts', { workspace_id: `eq.${WID}`, customer_id: 'eq.5550001111' });
+    await sbc.delete('google_ads_accounts', { workspace_id: `eq.${WID}`, customer_id: 'eq.5550002222' });
+  });
+
+  async function insertPendingFinalize(): Promise<string> {
+    const payloadJson = JSON.stringify({ access_token: 'AT', refresh_token: 'RT', customer_ids: ['5550001111', '5550002222'] });
+    const { ciphertext, iv } = await encryptAesGcm(KEY, payloadJson);
+    await sb.insert('oauth_pending_selections', { workspace_id: WID, encrypted_payload: ciphertext, payload_iv: iv });
+    const found = await sb.select<{ id: string }>('oauth_pending_selections', {
+      workspace_id: `eq.${WID}`, encrypted_payload: `eq.${ciphertext}`, select: 'id', limit: '1', order: 'created_at.desc',
+    });
+    return found[0].id;
+  }
+
+  function makeReq(jsonBody: unknown): Request {
+    return new Request('https://w.dev/oauth/google-ads/finalize', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer t', 'X-User-JWT': 'jwt', 'content-type': 'application/json' },
+      body: JSON.stringify(jsonBody),
+    });
+  }
+
+  it('401 quando validateInternalRequest falha', async () => {
+    vi.spyOn(internalAuth, 'validateInternalRequest').mockRejectedValue(new Response('{"error":"unauthorized"}', { status: 401 }));
+    const res = await handleOAuthFinalize(makeReq({ session_uuid: 'x', customer_ids: ['5550001111'] }), env);
+    expect(res.status).toBe(401);
+  });
+
+  it('404 quando session uuid inexistente', async () => {
+    vi.spyOn(internalAuth, 'validateInternalRequest').mockResolvedValue({ workspaceIds: [WID], userId: 'u' });
+    const res = await handleOAuthFinalize(makeReq({ session_uuid: '00000000-0000-0000-0000-0000deadbeef', customer_ids: ['5550001111'] }), env);
+    expect(res.status).toBe(404);
+  });
+
+  it('400 quando nenhum customer_id selecionado está na lista original', async () => {
+    vi.spyOn(internalAuth, 'validateInternalRequest').mockResolvedValue({ workspaceIds: [WID], userId: 'u' });
+    const sessionId = await insertPendingFinalize();
+    const res = await handleOAuthFinalize(makeReq({ session_uuid: sessionId, customer_ids: ['9999999999'] }), env);
+    expect(res.status).toBe(400);
+  });
+
+  it('200 cria accounts + deleta pending', async () => {
+    vi.spyOn(internalAuth, 'validateInternalRequest').mockResolvedValue({ workspaceIds: [WID], userId: 'u' });
+    const sessionId = await insertPendingFinalize();
+    const res = await handleOAuthFinalize(makeReq({ session_uuid: sessionId, customer_ids: ['5550001111', '5550002222'] }), env);
+    expect(res.status).toBe(200);
+    const body = await res.json() as { accounts_created: number };
+    expect(body.accounts_created).toBe(2);
+
+    const accs = await sb.select<{ customer_id: string; account_name: string | null }>('google_ads_accounts', {
+      workspace_id: `eq.${WID}`, select: 'customer_id,account_name',
+      customer_id: 'in.(5550001111,5550002222)',
+    });
+    expect(accs.length).toBe(2);
+    expect(accs.find(a => a.customer_id === '5550001111')?.account_name).toBe('Conta 555-000-1111');
+
+    const pending = await sb.select<{ id: string }>('oauth_pending_selections', { id: `eq.${sessionId}`, select: 'id' });
+    expect(pending.length).toBe(0);
   });
 });

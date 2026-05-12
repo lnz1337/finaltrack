@@ -168,3 +168,60 @@ export async function handleOAuthPreview(req: Request, env: Env, sessionUuid: st
     expires_at: rows[0].expires_at,
   }), { status: 200, headers: { 'content-type': 'application/json' } });
 }
+
+export async function handleOAuthFinalize(req: Request, env: Env): Promise<Response> {
+  let auth: Awaited<ReturnType<typeof validateInternalRequest>>;
+  try {
+    auth = await validateInternalRequest(req, env);
+  } catch (resp) {
+    return resp as Response;
+  }
+
+  const body = (await req.json().catch(() => null)) as { session_uuid?: string; customer_ids?: string[] } | null;
+  if (!body?.session_uuid || !Array.isArray(body.customer_ids) || body.customer_ids.length === 0) {
+    return new Response(JSON.stringify({ error: 'bad_request' }), { status: 400 });
+  }
+
+  const sb = createSupabaseClient(env);
+  const rows = await sb.select<{
+    id: string; workspace_id: string; encrypted_payload: string; payload_iv: string; expires_at: string;
+  }>('oauth_pending_selections', { id: `eq.${body.session_uuid}`, select: '*', limit: '1' });
+
+  if (!rows[0] || !auth.workspaceIds.includes(rows[0].workspace_id)) {
+    return new Response(JSON.stringify({ error: 'not_found' }), { status: 404 });
+  }
+  if (new Date(rows[0].expires_at).getTime() < Date.now()) {
+    await sb.delete('oauth_pending_selections', { id: `eq.${rows[0].id}` });
+    return new Response(JSON.stringify({ error: 'gone' }), { status: 410 });
+  }
+
+  const decrypted = await decryptAesGcm(env.ENCRYPTION_KEY, rows[0].encrypted_payload, rows[0].payload_iv);
+  const payload = JSON.parse(decrypted) as { refresh_token: string; customer_ids: string[] };
+
+  // Filtra só customer_ids selecionados que estão na lista original (defensiva)
+  const valid = body.customer_ids.filter((id) => payload.customer_ids.includes(id));
+  if (valid.length === 0) {
+    return new Response(JSON.stringify({ error: 'invalid_customer_ids' }), { status: 400 });
+  }
+
+  // Encrypt refresh_token uma vez por account inserted. account_name default por decisão 3.A.2.5.
+  const accountsToInsert = await Promise.all(valid.map(async (customerId) => {
+    const { ciphertext, iv } = await encryptAesGcm(env.ENCRYPTION_KEY, payload.refresh_token);
+    return {
+      workspace_id: rows[0].workspace_id,
+      customer_id: customerId,
+      account_name: defaultAccountName(customerId),
+      refresh_token_encrypted: ciphertext,
+      refresh_token_iv: iv,
+      is_active: true,
+    };
+  }));
+  await sb.upsert('google_ads_accounts', accountsToInsert, { onConflict: 'workspace_id,customer_id' });
+
+  // Limpa pending
+  await sb.delete('oauth_pending_selections', { id: `eq.${rows[0].id}` });
+
+  return new Response(JSON.stringify({ accounts_created: valid.length }), {
+    status: 200, headers: { 'content-type': 'application/json' },
+  });
+}
